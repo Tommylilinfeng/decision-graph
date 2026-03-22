@@ -1,7 +1,7 @@
 /**
  * prompts/prompt-config.ts
  *
- * 多 pipeline 可定制化 prompt 模板系统。
+ * Multi-pipeline customizable prompt template system.
  *
  * 每条 pipeline 是 data/pipelines/<pipelineId>/ 下的三个文件：
  *   pipeline.json   — round 定义（id, name, variables 等）
@@ -234,7 +234,7 @@ function renderTemplate(template: string, vars: Record<string, string>): string 
 // ── Factory ─────────────────────────────────────────────
 
 /**
- * 创建使用模板系统的 PromptBuilders。
+ * Create PromptBuilders using the template system.
  * pipelineId 指定从哪条 pipeline 加载模板。
  */
 export function createCustomPromptBuilders(pipelineId: string = 'cold-start'): PromptBuilders {

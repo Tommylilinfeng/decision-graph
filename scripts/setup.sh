@@ -2,7 +2,7 @@
 set -e
 
 # ─────────────────────────────────────────────────────────
-# CKG Setup — Install prerequisites and initialize the system
+# Context Chain — Setup — Install prerequisites and initialize the system
 #
 # Usage: bash scripts/setup.sh
 # ─────────────────────────────────────────────────────────
@@ -19,7 +19,7 @@ NC='\033[0m' # No Color
 
 echo ""
 echo "╔══════════════════════════════════════════════════╗"
-echo "║   Context Knowledge Graph — Setup                ║"
+echo "║   Context Chain — Setup                ║"
 echo "║   grep finds what code does,                     ║"
 echo "║   we record why it was written that way.         ║"
 echo "╚══════════════════════════════════════════════════╝"

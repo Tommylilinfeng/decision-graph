@@ -1,15 +1,15 @@
 /**
  * runners/connect.ts
  *
- * 独立运行器：关键词归一化 + 决策关系连接。
+ * Standalone runner: keyword normalization + decision relationship connection.
  *
- * 消化图谱中所有 PENDING_COMPARISON 边。
- * 可独立跑，也可被 cold-start、session ingestion 等 pipeline 在最后一步调用。
+ * Processes all PENDING_COMPARISON edges in the graph.
+ * Can run standalone or as a final step of any pipeline.
  *
  * 用法：
- *   npm run connect                          → 归一化 + 连接
- *   npm run connect -- --skip-normalize      → 只连接
- *   npm run connect -- --budget 200000       → 带预算限制
+ *   npm run connect                          → normalize + connect
+ *   npm run connect -- --skip-normalize      → connect only
+ *   npm run connect -- --budget 200000       → with budget limit
  *   npm run connect -- --batch-size 40       → 每 batch 40 个决策
  */
 
@@ -48,28 +48,28 @@ async function main(): Promise<void> {
   const session = await getSession()
 
   try {
-    // 先显示当前状态
+    // 先显示Current status
     const status = await getPendingStatus(session)
-    console.log(`\n📊 当前状态: ${status.totalPendingEdges} 条 PENDING 边, ${status.decisionsWithPending} 个决策待连接`)
+    console.log(`\n📊 Current status: ${status.totalPendingEdges}  PENDING edges, ${status.decisionsWithPending}  decisions pending connection`)
 
     if (status.totalPendingEdges === 0 && !skipNormalize) {
-      console.log(`   没有 PENDING 边。`)
+      console.log(`   No PENDING edges found.`)
       if (!skipNormalize) {
-        console.log(`   仍然运行关键词归一化...`)
+        console.log(`   Still running keyword normalization...`)
         const normResult = await normalizeKeywords(session, ai)
         if (budget) budget.record(ai.lastUsage)
-        console.log(`\n✅ 完成`)
+        console.log(`\n✅ Done`)
       }
       return
     }
 
-    // 1. 关键词归一化（在连接之前）
+    // 1. Keyword normalization (before connecting)
     if (!skipNormalize) {
       const normResult = await normalizeKeywords(session, ai)
       if (budget) budget.record(ai.lastUsage)
     }
 
-    // 2. 消化 PENDING 边
+    // 2. Process PENDING edges
     const result = await connectDecisions({
       dbSession: session,
       ai,
@@ -78,14 +78,14 @@ async function main(): Promise<void> {
       concurrency,
     })
 
-    // 3. 最终状态
+    // 3. Final status
     const finalStatus = await getPendingStatus(session)
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
 
-    console.log(`\n✅ 完成 (${elapsed}s)`)
-    console.log(`   ${result.batchesRun} 个批次, ${result.edgesCreated} 条关系边, ${result.pendingProcessed} 条 PENDING 已消化`)
+    console.log(`\n✅ Done (${elapsed}s)`)
+    console.log(`   ${result.batchesRun}  batches, ${result.edgesCreated}  relationship edges, ${result.pendingProcessed}  PENDING processed`)
     if (finalStatus.totalPendingEdges > 0) {
-      console.log(`   ⚠️ 还剩 ${finalStatus.totalPendingEdges} 条 PENDING 边待处理`)
+      console.log(`   ⚠️ Remaining: ${finalStatus.totalPendingEdges}  PENDING edges待处理`)
     }
 
     const { totalUsage } = ai
@@ -100,7 +100,7 @@ async function main(): Promise<void> {
 }
 
 main().catch(err => {
-  console.error('❌ 失败:', err.message)
+  console.error('❌ Failed:', err.message)
   closeDriver()
   process.exit(1)
 })

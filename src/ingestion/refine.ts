@@ -1,14 +1,14 @@
 /**
  * ingestion/refine.ts
  *
- * 后台精炼管线：提升图谱质量。
+ * Background refinement pipeline: improve graph quality.
  *
- * 子任务：
- *   1. staleness  — 检测代码已变化的决策，标记 stale
+ * Subtasks:
+ *   1. staleness  — Detect decisions where code changed, mark stale
  *   2. anchors    — APPROXIMATE_TO → ANCHORED_TO 升级
- *   3. keywords   — 全量关键词归一化
- *   4. edges      — 同文件决策对关系边补全
- *   5. gaps       — 空洞检测：有函数无决策的区域
+ *   3. keywords   — Global keyword normalization
+ *   4. edges      — Decision edge completion
+ *   5. gaps       — Gap detection: functions without decisions
  *
  * 用法：
  *   npm run refine                         → 全部
@@ -53,7 +53,7 @@ async function detectStaleness(session: Session, config: ReturnType<typeof loadC
     try {
       headCommit = getHeadCommit(repo.path)
     } catch {
-      console.log(`  ⚠️ ${repo.name}: 无法读取 git HEAD，跳过`)
+      console.log(`  ⚠️ ${repo.name}: Cannot read git HEAD, skipping`)
       continue
     }
 
@@ -68,12 +68,12 @@ async function detectStaleness(session: Session, config: ReturnType<typeof loadC
           changedFiles.add(filePath)
         }
       } catch {
-        changedFiles.add(filePath) // 保守策略：查不到就当变了
+        changedFiles.add(filePath) // Conservative: treat as changed if lookup fails
       }
     }
 
     if (changedFiles.size === 0) {
-      console.log(`  ✓ ${repo.name}: 无变化文件`)
+      console.log(`  ✓ ${repo.name}: No changed files`)
       continue
     }
 
@@ -91,7 +91,7 @@ async function detectStaleness(session: Session, config: ReturnType<typeof loadC
         const num = typeof cnt === 'number' ? cnt : cnt?.toNumber?.() ?? 0
         if (num > 0) {
           marked += num
-          console.log(`  📌 ${repo.name}:${filePath} → ${num} 条决策标记为 stale`)
+          console.log(`  📌 ${repo.name}:${filePath} → ${num}  decisions marked stale`)
         }
       } catch {}
     }
@@ -109,18 +109,18 @@ async function detectStaleness(session: Session, config: ReturnType<typeof loadC
     const orphanNum = typeof orphans === 'number' ? orphans : orphans?.toNumber?.() ?? 0
     if (orphanNum > 0) {
       marked += orphanNum
-      console.log(`  📌 ${orphanNum} 条孤儿决策（无锚点）标记为 stale`)
+      console.log(`  📌 ${orphanNum}  orphan decisions (no anchor) marked stale`)
     }
   } catch {}
 
-  console.log(`  ✅ 共 ${marked} 条决策标记为 stale`)
+  console.log(`  ✅ Total: ${marked}  decisions marked stale`)
   return marked
 }
 
-// ── 2. 锚点精度提升 ─────────────────────────────────────
+// ── 2. Anchor precision upgrade ─────────────────────────────────────
 
 async function upgradeAnchors(session: Session): Promise<number> {
-  console.log('\n🎯 [2/5] 锚点精度提升...')
+  console.log('\n🎯 [2/5] Anchor precision upgrade...')
 
   const result = await session.run(
     `MATCH (d:DecisionContext)-[r:APPROXIMATE_TO]->(f:CodeEntity {entity_type: 'file'})
@@ -151,11 +151,11 @@ async function upgradeAnchors(session: Session): Promise<number> {
     } catch {}
   }
 
-  console.log(`  ✅ ${upgraded} 条锚点升级`)
+  console.log(`  ✅ ${upgraded}  anchors upgraded`)
   return upgraded
 }
 
-// ── 3. 关键词归一化（委托给独立积木块）────────────────────
+// ── 3. Keyword normalization (delegated to building block)────────────────────
 
 async function runNormalizeKeywords(session: Session, ai: AIProvider): Promise<number> {
   console.log('\n🏷️  [3/5] 关键词归一化...')
@@ -163,14 +163,14 @@ async function runNormalizeKeywords(session: Session, ai: AIProvider): Promise<n
   return result.normalized
 }
 
-// ── 4. 决策边补全（委托给独立积木块）────────────────────
+// ── 4. Edge completion (delegated to building block)────────────────────
 
 async function runCompleteEdges(session: Session, ai: AIProvider, budget: BudgetManager | null): Promise<number> {
   console.log('\n🔗 [4/5] 决策边补全...')
 
-  // connectDecisions 会消化所有 PENDING_COMPARISON 边
-  // 如果图谱里还没有 PENDING 边（比如老决策从未跑过 createPendingEdges），
-  // 先给所有 active 决策之间建 PENDING 边
+  // connectDecisions processes all PENDING_COMPARISON edges
+  // If no PENDING edges yet (old decisions never ran createPendingEdges),
+  // first create PENDING edges between all active decisions
   try {
     const allActiveResult = await session.run(
       `MATCH (d:DecisionContext {staleness: 'active'}) RETURN d.id AS id`
@@ -183,7 +183,7 @@ async function runCompleteEdges(session: Session, ai: AIProvider, budget: Budget
   } catch {}
 
   const result = await connectDecisions({ dbSession: session, ai, budget, verbose: true })
-  console.log(`  ✅ ${result.edgesCreated} 条关系边补全`)
+  console.log(`  ✅ ${result.edgesCreated}  relationship edges completed`)
   return result.edgesCreated
 }
 
@@ -250,16 +250,16 @@ async function detectGaps(session: Session): Promise<GapReport> {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2))
 
-  console.log(`  📊 覆盖率: ${covered}/${total} 函数 (${rate}%)`)
+  console.log(`  📊 Coverage: ${covered}/${total} 函数 (${rate}%)`)
   if (uncovered.length > 0) {
-    console.log(`  🕳️  ${uncovered.length} 个高调用量函数缺少决策:`)
+    console.log(`  🕳️  ${uncovered.length}  high-call functions missing decisions:`)
     for (const fn of uncovered.slice(0, 10)) {
       console.log(`    • ${fn.name} (${fn.callerCount} callers)  ${fn.path}`)
     }
-    if (uncovered.length > 10) console.log(`    ... 共 ${uncovered.length} 个，详见 data/coverage-report.json`)
+    if (uncovered.length > 10) console.log(`    ... Total: ${uncovered.length} 个，See data/coverage-report.json`)
   }
 
-  console.log(`  ✅ 报告写入 data/coverage-report.json`)
+  console.log(`  ✅ Report written to data/coverage-report.json`)
   return report
 }
 
@@ -271,7 +271,7 @@ async function main() {
   const session = await getSession()
 
   const tasksToRun = ALL_TASKS.filter(shouldRun)
-  console.log(`\n🔧 精炼管线启动 — 任务: ${tasksToRun.join(', ')}`)
+  console.log(`\n🔧 Refinement started — tasks: ${tasksToRun.join(', ')}`)
   const startTime = Date.now()
 
   try {
@@ -297,7 +297,7 @@ async function main() {
 
       if (shouldRun('edges')) {
         if (budget?.exceeded) {
-          console.log(`  ⚠️ 预算已用完，跳过边补全`)
+          console.log(`  ⚠️ Budget exhausted, skipping edge completion`)
         } else {
           await runCompleteEdges(session, ai, budget)
         }
@@ -313,7 +313,7 @@ async function main() {
     }
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
-    console.log(`\n✅ 精炼管线完成 (${elapsed}s)\n`)
+    console.log(`\n✅ Refinement complete (${elapsed}s)\n`)
 
   } finally {
     await session.close()
@@ -322,7 +322,7 @@ async function main() {
 }
 
 main().catch(err => {
-  console.error('❌ 精炼管线失败:', err.message)
+  console.error('❌ Refinement failed:', err.message)
   closeDriver()
   process.exit(1)
 })

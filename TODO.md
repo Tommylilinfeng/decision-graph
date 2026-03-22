@@ -1,4 +1,4 @@
-# CKG TODO
+# Context Chain TODO
 
 ## 已完成 ✅
 
@@ -17,6 +17,8 @@
 - [x] 数据库表访问关系（link-tables + parse-sql）
 - [x] 增量分析 + 变更检测（state.ts + git-utils）
 - [x] Embedding 生成管线（embed-decisions）
+- [x] connect_decisions 独立积木块（归一化 + PENDING 边 + 关系连接）
+- [x] normalize_keywords 独立积木块
 
 ### MCP Server（9 个工具）
 - [x] get_code_structure — 代码结构

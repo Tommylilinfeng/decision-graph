@@ -1,8 +1,8 @@
 /**
  * ingestion/shared.ts
  *
- * 被多条 pipeline 复用的工具函数。
- * 从 cold-start-v2.ts 抽出，zero logic change。
+ * Shared utility functions used by multiple pipelines.
+ * Extracted from cold-start-v2.ts, zero logic change.
  */
 
 import fs from 'fs'

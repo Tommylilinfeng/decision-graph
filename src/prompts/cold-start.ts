@@ -176,9 +176,9 @@ Default to "decision" unless you have clear evidence otherwise.
 {
   "function": "createOrder",
   "related_functions": ["formatCartItemsForOrder", "place_order"],
-  "summary": "createOrder 把所有下单逻辑（库存扣减、订单创建、coupon核销）放在 PostgreSQL RPC 而非应用层，用数据库事务保证原子性，代价是业务逻辑分散在前端和数据库两个 repo",
-  "content": "createOrder 没有直接操作数据库表，而是调 Supabase RPC（place_order）把所有下单逻辑放在 PostgreSQL 函数里。这个决策让原子性由数据库层保证——库存扣减、订单创建、coupon 核销在同一个事务内完成，不需要应用层实现分布式事务。代价是业务逻辑分散在前端 repo 和数据库 repo 两个地方，调试需要切换上下文。",
-  "keywords": ["RPC", "place_order", "Supabase", "原子性", "PostgreSQL", "事务"],
+  "summary": "createOrder puts all order logic (inventory deduction, order creation, coupon redemption) in a PostgreSQL RPC instead of the application layer, using DB transactions for atomicity, at the cost of splitting business logic across frontend and database repos",
+  "content": "createOrder does not directly operate on tables but calls Supabase RPC (place_order) to put all order logic in a PostgreSQL function. This lets the database guarantee atomicity — inventory deduction, order creation, and coupon redemption complete in a single transaction without application-layer distributed transactions. The trade-off is business logic split across frontend and database repos, requiring context switching when debugging.",
+  "keywords": ["RPC", "place_order", "Supabase", "atomicity", "PostgreSQL", "transaction"],
   "finding_type": "decision"
 }
 
@@ -321,7 +321,7 @@ Find groups of keywords that refer to the same concept but use different terms (
 
 Rules:
 - Only group keywords that truly mean the same thing in this codebase context
-- Chinese and English terms for the same concept should be grouped (e.g. "认证" and "auth")
+- Chinese and English terms for the same concept should be grouped (e.g. "authentication" and "auth")
 - Abbreviations should be grouped with full forms (e.g. "tx" and "transaction")
 - Do NOT group keywords that are merely related (e.g. "订单" and "支付" are related but not synonyms)
 
@@ -333,7 +333,7 @@ Return ONLY raw JSON (no markdown, no backticks):
 Return empty array [] if no normalization needed.`
 }
 
-// ─── PromptBuilders: 可插拔 prompt 模板集合 ────────────────────────────────
+// ─── PromptBuilders: Pluggable prompt template collection ────────────────────────────────
 
 export interface PromptBuilders {
   scope: typeof buildScopePrompt

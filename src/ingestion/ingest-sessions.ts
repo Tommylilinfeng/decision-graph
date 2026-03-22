@@ -1,3 +1,4 @@
+// @deprecated — use ingest-sessions-v2.ts instead
 /**
  * ingest-sessions.ts
  *

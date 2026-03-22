@@ -1,10 +1,10 @@
 /**
- * Schema 初始化脚本
+ * Schema initialization script
  *
- * 对应 PRD §8 数据模型
- * 运行：npm run db:schema
+ * Corresponds to PRD §8 数据模型
+ * Run:npm run db:schema
  *
- * 这个脚本是幂等的——重复运行不会出错
+ * This script is idempotent — safe to re-run
  *
  * Memgraph 3.6+: text search 是正式功能，不需要 experimental flag
  */
@@ -13,7 +13,7 @@ import { getSession, verifyConnectivity, closeDriver } from './client'
 import { Session } from 'neo4j-driver'
 
 // ─────────────────────────────────────────────
-// 节点约束（保证 id 唯一）
+// Node constraints (ensure unique id)
 // ─────────────────────────────────────────────
 
 const CONSTRAINTS: string[] = [
@@ -24,7 +24,7 @@ const CONSTRAINTS: string[] = [
 ]
 
 // ─────────────────────────────────────────────
-// 属性索引
+// Property indexes
 // ─────────────────────────────────────────────
 
 const INDEXES: string[] = [
@@ -49,9 +49,9 @@ const INDEXES: string[] = [
 ]
 
 // ─────────────────────────────────────────────
-// 全文索引（Memgraph 3.6+ 原生支持）
+// Full-text indexes（Memgraph 3.6+ 原生支持）
 //
-// 查询方式：
+// Query examples：
 //   CALL text_search.search("idx_decision", "data.summary:退款") YIELD node, score
 //   CALL text_search.search_all("idx_decision", "退款") YIELD node, score
 // ─────────────────────────────────────────────
@@ -65,7 +65,7 @@ const TEXT_INDEXES: string[] = [
 ]
 
 // ─────────────────────────────────────────────
-// 执行
+// Execute
 // ─────────────────────────────────────────────
 
 async function runSchemaSetup(): Promise<void> {
@@ -73,22 +73,22 @@ async function runSchemaSetup(): Promise<void> {
   const session = await getSession()
 
   try {
-    console.log('\n📐 创建节点约束...')
+    console.log('\n📐 Creating node constraints...')
     for (const cypher of CONSTRAINTS) {
       await runSafe(session, cypher)
     }
 
-    console.log('\n📑 创建索引...')
+    console.log('\n📑 Creating indexes...')
     for (const cypher of INDEXES) {
       await runSafe(session, cypher)
     }
 
-    console.log('\n🔍 创建全文索引...')
+    console.log('\n🔍 创建Full-text indexes...')
     for (const cypher of TEXT_INDEXES) {
       await runSafe(session, cypher)
     }
 
-    console.log('\n✅ Schema 初始化完成\n')
+    console.log('\n✅ Schema initialization complete\n')
     await printSchemaStats(session)
   } finally {
     await session.close()
@@ -108,7 +108,7 @@ async function runSafe(session: Session, cypher: string): Promise<void> {
       err.message?.includes('Unable to create')
     ) {
       const label = cypher.slice(0, 60).replace(/\n/g, ' ').trim()
-      console.log(`  ⚠ 已存在，跳过: ${label}...`)
+      console.log(`  ⚠ Already exists, skipping: ${label}...`)
     } else {
       console.error(`  ✗ 失败: ${cypher.slice(0, 70)}`)
       console.error(`    ${err.message}`)
@@ -117,17 +117,17 @@ async function runSafe(session: Session, cypher: string): Promise<void> {
 }
 
 async function printSchemaStats(session: Session): Promise<void> {
-  console.log('📊 当前 Schema 状态:')
+  console.log('📊 Current schema status:')
   try {
     const result = await session.run('SHOW INDEX INFO')
-    console.log(`  索引数量: ${result.records.length}`)
+    console.log(`  Index count: ${result.records.length}`)
     for (const record of result.records) {
       const keys = record.keys as unknown as string[]
       const fields = keys.map(k => `${k}=${record.get(k)}`).join(', ')
       console.log(`    - ${fields}`)
     }
   } catch {
-    console.log('  (无法读取索引详情，不影响功能)')
+    console.log('  (Cannot read index details, does not affect functionality)')
   }
 }
 

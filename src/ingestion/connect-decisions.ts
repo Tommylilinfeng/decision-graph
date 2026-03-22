@@ -1,19 +1,19 @@
 /**
  * ingestion/connect-decisions.ts
  *
- * 独立积木块：决策关系连接。
+ * Building block: decision relationship connection.
  *
- * 核心思路：用 PENDING_COMPARISON 边追踪"哪些决策对还没比较过"。
- * - 新决策写入后 → createPendingEdges() 建 PENDING 边
- * - 决策内容更新 → invalidateDecisionEdges() 失效旧边 + 重建 PENDING 边
- * - connectDecisions() 消化 PENDING 边 → 有关系的建关系边，没关系的删 PENDING
+ * Core idea: use PENDING_COMPARISON edges to track which decision pairs have not been compared yet.
+ * - After new decisions are written → createPendingEdges() creates PENDING edges
+ * - Decision content updated → invalidateDecisionEdges() invalidates old edges + rebuilds PENDING edges
+ * - connectDecisions() processes PENDING edges → creates relationship edges where found, deletes PENDING where not
  *
- * 图谱的终态是干净的：只剩有意义的关系边，没有垃圾。
+ * The graph converges to a clean state: only meaningful relationship edges remain.
  *
- * 用法：
+ * Usage:
  *   import { createPendingEdges, connectDecisions } from './connect-decisions'
  *
- *   // Pipeline 写完决策后：
+ *   // After pipeline writes decisions:
  *   await createPendingEdges(session, newIds)
  *   await connectDecisions({ dbSession: session, ai, budget })
  */
@@ -35,19 +35,19 @@ export interface ConnectDecisionsOptions {
   dbSession: Session
   ai: AIProvider
   budget?: BudgetManager | null
-  /** 一个 batch 最多放多少个 decision summary（默认 50） */
+  /** Max decision summaries per batch (default 50) */
   batchCapacity?: number
-  /** LLM 并发数（默认 2） */
+  /** LLM concurrency (default 2) */
   concurrency?: number
   verbose?: boolean
 }
 
 export interface ConnectDecisionsResult {
-  /** 消化了多少条 PENDING_COMPARISON 边 */
+  /** Number of PENDING_COMPARISON edges processed */
   pendingProcessed: number
-  /** 建了多少条关系边 */
+  /** Number of relationship edges created */
   edgesCreated: number
-  /** 跑了多少个 batch */
+  /** Number of batches run */
   batchesRun: number
 }
 
@@ -65,11 +65,11 @@ const RELATIONSHIP_TYPES = ['CAUSED_BY', 'DEPENDS_ON', 'CONFLICTS_WITH', 'CO_DEC
 // ── createPendingEdges ──────────────────────────────────
 
 /**
- * 新决策写入后调用。
- * 为每个新决策，跟所有已有 active 决策之间建 PENDING_COMPARISON 边
- * （如果它们之间还没有任何边的话）。
+ * Called after new decisions are written.
+ * Creates PENDING_COMPARISON edges between each new decision and all existing active decisions
+ * (if no edge exists between them yet).
  *
- * @returns 建了多少条 PENDING_COMPARISON 边
+ * @returns number of PENDING_COMPARISON edges created
  */
 export async function createPendingEdges(
   session: Session,
@@ -84,7 +84,7 @@ export async function createPendingEdges(
 
   for (const newId of newDecisionIds) {
     try {
-      // 找所有跟 newId 之间没有任何边的 active 决策
+      // Find all active decisions with no edge to newId
       const result = await session.run(
         `MATCH (new:DecisionContext {id: $newId})
          MATCH (existing:DecisionContext {staleness: 'active'})
@@ -99,12 +99,12 @@ export async function createPendingEdges(
       const cnt = toNum(result.records[0]?.get('cnt'))
       totalCreated += cnt
     } catch (err: any) {
-      if (verbose) console.log(`  ⚠️ createPendingEdges 失败 (${newId}): ${err.message}`)
+      if (verbose) console.log(`  ⚠️ createPendingEdges failed (${newId}): ${err.message}`)
     }
   }
 
   if (verbose && totalCreated > 0) {
-    console.log(`  📌 ${totalCreated} 条 PENDING_COMPARISON 边已创建`)
+    console.log(`  📌 ${totalCreated}  PENDING_COMPARISON edges created`)
   }
 
   return totalCreated
@@ -113,11 +113,11 @@ export async function createPendingEdges(
 // ── invalidateDecisionEdges ─────────────────────────────
 
 /**
- * 决策内容被更新后调用。
- * 删除该决策的所有关系边和 PENDING 边，然后重建 PENDING 边。
- * 让它回到"跟所有人都没比较过"的状态。
+ * Called after decision content is updated.
+ * Deletes all relationship and PENDING edges, then rebuilds PENDING edges.
+ * Resets to "not compared with anyone" state.
  *
- * @returns 删了多少条旧边
+ * @returns number of old edges deleted
  */
 export async function invalidateDecisionEdges(
   session: Session,
@@ -127,7 +127,7 @@ export async function invalidateDecisionEdges(
   const verbose = options?.verbose ?? true
   const now = new Date().toISOString()
 
-  // 1. 删除所有关系边和 PENDING 边
+  // 1. Delete all relationship and PENDING edges
   let deleted = 0
   try {
     const result = await session.run(
@@ -139,7 +139,7 @@ export async function invalidateDecisionEdges(
     deleted = toNum(result.records[0]?.get('cnt'))
   } catch {}
 
-  // 2. 重建 PENDING 边（跟所有 active 决策）
+  // 2. Rebuild PENDING edges (with all active decisions)
   try {
     await session.run(
       `MATCH (d:DecisionContext {id: $id})
@@ -151,7 +151,7 @@ export async function invalidateDecisionEdges(
   } catch {}
 
   if (verbose && deleted > 0) {
-    console.log(`  🔄 ${decisionId}: ${deleted} 条旧边已失效，PENDING 已重建`)
+    console.log(`  🔄 ${decisionId}: ${deleted}  old edges invalidated, PENDING rebuilt`)
   }
 
   return deleted
@@ -160,13 +160,13 @@ export async function invalidateDecisionEdges(
 // ── connectDecisions（核心）──────────────────────────────
 
 /**
- * 消化所有 PENDING_COMPARISON 边。
+ * Process all PENDING_COMPARISON edges.
  *
- * 1. 查所有 PENDING_COMPARISON 边涉及的决策
- * 2. 按 batchCapacity 分 batch
- * 3. 每个 batch：LLM grouping → 每组 LLM relationship → 写关系边
- * 4. 删除 batch 内所有 PENDING_COMPARISON 边（有没有关系都删）
- * 5. 迭代直到没有 PENDING 边或预算耗尽
+ * 1. Find all decisions involved in PENDING edges
+ * 2. Split into batches by batchCapacity
+ * 3. Each batch: LLM grouping → per-group LLM relationship → write edges
+ * 4. Delete all PENDING edges in batch (regardless of result)
+ * 5. Iterate until no PENDING edges remain or budget exhausted
  */
 export async function connectDecisions(
   opts: ConnectDecisionsOptions
@@ -180,41 +180,41 @@ export async function connectDecisions(
     verbose = true,
   } = opts
 
-  if (verbose) console.log('\n🔗 决策关系连接...')
+  if (verbose) console.log('\n🔗 Connecting decisions...')
 
   let totalPendingProcessed = 0
   let totalEdgesCreated = 0
   let batchesRun = 0
 
-  // 迭代消化 PENDING 边
+  // Iterate through PENDING edges
   while (true) {
-    // 检查预算
+    // Check budget
     if (budget?.exceeded) {
-      if (verbose) console.log(`  ⚠️ 预算已用完，停止`)
+      if (verbose) console.log(`  ⚠️ Budget exhausted, stopping`)
       break
     }
 
-    // 1. 查涉及 PENDING 边的决策 ID
+    // 1. Find decision IDs with PENDING edges
     const pendingDecisionIds = await getPendingDecisionIds(session, batchCapacity)
 
     if (pendingDecisionIds.length < 2) {
-      if (verbose && batchesRun === 0) console.log(`  ○ 没有待处理的 PENDING 边`)
+      if (verbose && batchesRun === 0) console.log(`  ○ No PENDING edges to process`)
       break
     }
 
     if (verbose) {
       const pendingCount = await countPendingEdges(session)
-      console.log(`\n  📦 Batch ${batchesRun + 1}: ${pendingDecisionIds.length} 个决策 (${pendingCount} 条 PENDING 边剩余)`)
+      console.log(`\n  📦 Batch ${batchesRun + 1}: ${pendingDecisionIds.length}  decisions (${pendingCount}  PENDING edges remaining)`)
     }
 
-    // 2. 读决策详情
+    // 2. Load decision details
     const decisions = await getDecisionRecords(session, pendingDecisionIds)
     if (decisions.length < 2) break
 
-    // 3. 获取 CPG hints
+    // 3. Get CPG hints
     const cpgHints = await getCPGHints(session, decisions)
     if (cpgHints.length > 0 && verbose) {
-      console.log(`    📁 ${cpgHints.length} 条 CPG 调用关系提示`)
+      console.log(`    📁 ${cpgHints.length}  CPG call hints loaded`)
     }
 
     // 4. LLM grouping
@@ -235,16 +235,16 @@ export async function connectDecisions(
       if (!Array.isArray(groups)) groups = []
 
       if (verbose && groups.length > 0) {
-        console.log(`    ✓ ${groups.length} 组关联决策`)
+        console.log(`    ✓ ${groups.length}  related decision groups`)
         for (const g of groups) {
-          console.log(`      • [${g.group.length} 个] ${g.reason}`)
+          console.log(`      • [${g.group.length} ] ${g.reason}`)
         }
       }
     } catch (err: any) {
-      if (verbose) console.log(`    ⚠️ Grouping 失败: ${err.message}`)
+      if (verbose) console.log(`    ⚠️ Grouping failed: ${err.message}`)
     }
 
-    // 5. 每组 LLM deep analysis
+    // 5. Per-group LLM deep analysis
     let batchEdges = 0
 
     if (groups.length > 0) {
@@ -254,7 +254,7 @@ export async function connectDecisions(
         async (group) => {
           if (budget?.exceeded) return []
 
-          // 组装完整内容
+          // Build full content
           const groupDecisions: DecisionFullContent[] = []
           for (const id of group.group) {
             const d = decisions.find(dd => dd.id === id)
@@ -278,13 +278,13 @@ export async function connectDecisions(
             const result = parseJsonSafe<{ edges: any[] }>(rawRel, { edges: [] })
             return Array.isArray(result.edges) ? result.edges : []
           } catch (err: any) {
-            if (verbose) console.log(`    ⚠️ 组分析失败: ${err.message}`)
+            if (verbose) console.log(`    ⚠️ Group analysis failed: ${err.message}`)
             return []
           }
         }
       )
 
-      // 写入关系边
+      // Write relationship edges
       for (const edges of groupResults) {
         for (const edge of edges) {
           const edgeType = String(edge.type).toUpperCase()
@@ -311,7 +311,7 @@ export async function connectDecisions(
     }
 
     // 6. 删除 batch 内所有 PENDING_COMPARISON 边
-    //    不管有没有关系都删——有关系的已经建了关系边，没关系的删了就代表"比较过了"
+    //    Delete all — relationships have own edges, deleted PENDING means "already compared"
     const pendingDeleted = await deletePendingEdgesAmong(session, pendingDecisionIds)
 
     totalPendingProcessed += pendingDeleted
@@ -319,12 +319,12 @@ export async function connectDecisions(
     batchesRun++
 
     if (verbose) {
-      console.log(`    📝 ${batchEdges} 条关系边, ${pendingDeleted} 条 PENDING 边已消化`)
+      console.log(`    📝 ${batchEdges}  relationship edges, ${pendingDeleted}  PENDING edges processed`)
     }
   }
 
   if (verbose && batchesRun > 0) {
-    console.log(`\n  ✅ 关系连接完成: ${batchesRun} 批次, ${totalEdgesCreated} 条关系边, ${totalPendingProcessed} 条 PENDING 已消化`)
+    console.log(`\n  ✅ Connection complete: ${batchesRun}  batches, ${totalEdgesCreated}  relationship edges, ${totalPendingProcessed}  PENDING processed`)
   }
 
   return {
@@ -337,8 +337,8 @@ export async function connectDecisions(
 // ── Internal Helpers ────────────────────────────────────
 
 /**
- * 拿涉及 PENDING 边的决策 ID，数量不超过 limit。
- * 优先选 PENDING 边最多的决策（最需要处理的）。
+ * Get decision IDs with PENDING edges, up to limit.
+ * Prioritize decisions with the most PENDING edges.
  */
 async function getPendingDecisionIds(session: Session, limit: number): Promise<string[]> {
   try {
@@ -356,7 +356,7 @@ async function getPendingDecisionIds(session: Session, limit: number): Promise<s
   }
 }
 
-/** 总 PENDING 边数（用于日志） */
+/** Total PENDING edge count (for logging) */
 async function countPendingEdges(session: Session): Promise<number> {
   try {
     const result = await session.run(
@@ -368,7 +368,7 @@ async function countPendingEdges(session: Session): Promise<number> {
   }
 }
 
-/** 读决策的完整信息 */
+/** Load full decision records */
 async function getDecisionRecords(session: Session, ids: string[]): Promise<DecisionRecord[]> {
   if (ids.length === 0) return []
 
@@ -399,7 +399,7 @@ async function getDecisionRecords(session: Session, ids: string[]): Promise<Deci
   }
 }
 
-/** 查 batch 内决策锚定函数之间的 CALLS 边（CPG 提示） */
+/** Query CALLS edges between anchored functions in batch (CPG hints) */
 async function getCPGHints(session: Session, decisions: DecisionRecord[]): Promise<string[]> {
   const fnNames = decisions.map(d => d.functionName).filter(Boolean)
   if (fnNames.length < 2) return []
@@ -418,7 +418,7 @@ async function getCPGHints(session: Session, decisions: DecisionRecord[]): Promi
   }
 }
 
-/** 删除一组决策之间的所有 PENDING_COMPARISON 边 */
+/** Delete all PENDING_COMPARISON edges among a set of decisions */
 async function deletePendingEdgesAmong(session: Session, ids: string[]): Promise<number> {
   if (ids.length < 2) return 0
 
@@ -448,7 +448,7 @@ function toNum(val: any): number {
 // ── Status Query (for Dashboard) ────────────────────────
 
 /**
- * 查询当前 PENDING 边状态。供 Dashboard 使用。
+ * Query current PENDING edge status. Used by Dashboard.
  */
 export async function getPendingStatus(session: Session): Promise<{
   totalPendingEdges: number

@@ -1,7 +1,7 @@
 /**
  * ai/index.ts
  *
- * 工厂函数：根据 config 创建对应的 AIProvider。
+ * Factory: create AIProvider from config.
  */
 
 export { AIProvider, AIProviderOptions, AIConfig, TokenUsage, RateLimitInfo } from './types'
@@ -25,6 +25,6 @@ export function createAIProvider(config?: AIConfig): AIProvider {
     case 'anthropic-api':
       return new AnthropicAPIProvider(c)
     default:
-      throw new Error(`未知的 AI provider: ${(c as any).provider}`)
+      throw new Error(`Unknown AI provider: ${(c as any).provider}`)
   }
 }

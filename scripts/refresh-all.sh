@@ -1,15 +1,15 @@
 #!/bin/bash
 # refresh-all.sh
 #
-# 一键刷新所有 repo 的代码结构数据：
+# Refresh all repo code structure data:
 #   - bite-me-website: Joern CPG → JSON → Memgraph
 #   - biteme-shared:   Joern CPG → JSON → Memgraph
 #   - biteme-infra:    parse-sql → JSON → Memgraph
-#   - 跨服务连接:      link:repos + link:services + link:tables
+#   - Cross-service connections:      link:repos + link:services + link:tables
 #
 # 用法: bash scripts/refresh-all.sh [--skip-joern] [--skip-ingest] [--skip-link]
 #
-# 前提: Joern 已安装，Memgraph 已启动
+# Prerequisites: Joern installed, Memgraph running
 
 set -e
 
@@ -17,7 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CKG_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BITE_DIR="${BITE_DIR:-$(cd "$CKG_DIR/.." && pwd)/bite}"
 
-# ── 参数解析 ──────────────────────────────────────────
+# ── Parse arguments ──────────────────────────────────────────
 SKIP_JOERN=false
 SKIP_INGEST=false
 SKIP_LINK=false
@@ -110,11 +110,11 @@ else
   echo "⏭️  跳过 Memgraph 导入 (--skip-ingest)"
 fi
 
-# ── Step 4: 建跨服务连接 ─────────────────────────────
+# ── Step 4: 建Cross-service connections ─────────────────────────────
 if [ "$SKIP_LINK" = false ]; then
   echo ""
   echo "═══════════════════════════════════════════════════"
-  echo "  Step 4: 建跨服务连接"
+  echo "  Step 4: 建Cross-service connections"
   echo "═══════════════════════════════════════════════════"
 
   echo ""
@@ -131,11 +131,11 @@ if [ "$SKIP_LINK" = false ]; then
 
 else
   echo ""
-  echo "⏭️  跳过跨服务连接 (--skip-link)"
+  echo "⏭️  跳过Cross-service connections (--skip-link)"
 fi
 
 echo ""
 echo "═══════════════════════════════════════════════════"
-echo "  ✅ 全部完成"
+echo "  ✅ All complete"
 echo "═══════════════════════════════════════════════════"
 echo ""

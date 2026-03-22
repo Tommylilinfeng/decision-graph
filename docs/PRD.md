@@ -1,4 +1,4 @@
-# PRD: Context Knowledge Graph — 基础设施层
+# PRD: Context Chain — 基础设施层
 
 > 版本：0.2
 > 日期：2026年3月22日

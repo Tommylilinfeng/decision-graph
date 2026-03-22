@@ -47,7 +47,7 @@ const deepCheck   = args.includes('--deep-check')
 const budgetStr   = getArg('--budget')
 
 if (!goal) {
-  console.error('用法: npm run cold-start:v2 -- --goal "目标描述" [--repo name] [--owner me] [--concurrency 2] [--budget 500000] [--dry-run]')
+  console.error('Usage: npm run cold-start:v2 -- --goal "目标描述" [--repo name] [--owner me] [--concurrency 2] [--budget 500000] [--dry-run]')
   process.exit(1)
 }
 
@@ -101,7 +101,7 @@ function checkDependencyChanges(
 // ── Budget-aware AI call ────────────────────────────────
 
 class BudgetExceededError extends Error {
-  constructor(summary: string) { super(`⚠️ 预算已用完 (${summary})，停止管线`) }
+  constructor(summary: string) { super(`⚠️ Budget exhausted (${summary})，stopping pipeline`) }
 }
 
 function trackBudget(ai: ReturnType<typeof createAIProvider>, budget: BudgetManager | null): void {
@@ -126,7 +126,7 @@ async function main(): Promise<void> {
     process.exit(1)
   }
 
-  // ── 初始化可插拔组件 ───────────────────────────────
+  // ── Initialize pluggable components ───────────────────────────────
   const ai = createAIProvider(config.ai)
   const prompts = createCustomPromptBuilders('cold-start')
   const budget = parseBudget(budgetStr, ai.rateLimit)
@@ -500,20 +500,20 @@ async function main(): Promise<void> {
     if (allDecisions.length >= 2) {
       console.log(`\n  \x1b[36m🔗 Round 4: Relationships\x1b[0m`)
 
-      // 4a. 关键词归一化（在连接之前，让分组更精准）
+      // 4a. Keyword normalization (before connecting, improves grouping)
       try {
         await normalizeKeywords(session, ai, { verbose: true })
         trackBudget(ai, budget)
       } catch (err: any) {
         if (err instanceof BudgetExceededError) throw err
-        console.log(`    ⚠️ 关键词归一化失败: ${err.message}`)
+        console.log(`    ⚠️ Keyword normalization failed: ${err.message}`)
       }
 
-      // 4b. 建 PENDING 边（新决策 vs 所有已有决策）
+      // 4b. Build PENDING edges (new decisions vs all existing)
       const newIds = allDecisions.map(d => d.id)
       await createPendingEdges(session, newIds, { verbose: true })
 
-      // 4c. 消化 PENDING 边（分组 + 关系分析）
+      // 4c. Process PENDING edges (grouping + relationship analysis)
       try {
         const connectResult = await connectDecisions({
           dbSession: session,
@@ -525,7 +525,7 @@ async function main(): Promise<void> {
         console.log(`    📝 ${connectResult.edgesCreated} relationship edges, ${connectResult.pendingProcessed} PENDING edges processed`)
       } catch (err: any) {
         if (err instanceof BudgetExceededError) throw err
-        console.log(`    ⚠️ 关系连接失败: ${err.message}`)
+        console.log(`    ⚠️ Relationship connection failed: ${err.message}`)
       }
     } else {
       console.log(`\n  ○ Skipping Round 4 (need ≥2 decisions for relationship analysis)`)

@@ -1,3 +1,4 @@
+// @deprecated — use cold-start-v2.ts instead
 /**
  * cold-start.ts
  *

@@ -1,8 +1,8 @@
 /**
  * ai/types.ts
  *
- * AIProvider 接口定义。
- * 所有 AI 调用方式（claude -p、Anthropic API、OpenAI 等）都实现这个接口。
+ * AIProvider interface definition.
+ * All AI providers (claude -p, Anthropic API, etc.) implement this interface.
  */
 
 export interface AIProviderOptions {
@@ -23,22 +23,22 @@ export interface RateLimitInfo {
 }
 
 export interface AIProvider {
-  /** 标识名，用于日志 */
+  /** Display name for logging */
   name: string
 
   /**
-   * 发送 prompt，返回 raw string。
-   * 调用方负责 JSON 解析——provider 只管传输。
+   * Send prompt, return raw string.
+   * Caller handles JSON parsing — provider handles transport.
    */
   call(prompt: string, options?: AIProviderOptions): Promise<string>
 
-  /** 最近一次调用的 token 用量 */
+  /** Token usage from last call */
   lastUsage: TokenUsage
 
-  /** 累计 token 用量 */
+  /** Cumulative token usage */
   totalUsage: TokenUsage
 
-  /** 最新 rate limit 信息（仅 Anthropic API 可用） */
+  /** Latest rate limit info (Anthropic API only) */
   rateLimit?: RateLimitInfo
 }
 

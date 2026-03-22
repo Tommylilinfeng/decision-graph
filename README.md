@@ -1,4 +1,4 @@
-# Context Graph
+# Context Chain
 
 > **grep 找的是代码写了什么，我们记录的是代码为什么这样写。**
 
@@ -8,7 +8,7 @@
 
 在 AI 写代码的时代，开发者与 AI 的对话中包含大量决策理由——为什么选方案 A 而不是 B、当时还考虑过什么、这个 trade-off 是什么。但这些信息随着对话窗口关闭永久丢失。新功能、新成员、甚至三个月后的自己，都无法知道"为什么这样写"。
 
-Context Graph 把这些散落的决策自动提取、存储为知识图谱，并通过 MCP 协议喂给 Claude Code / Cursor。
+Context Chain 把这些散落的决策自动提取、存储为知识图谱，并通过 MCP 协议喂给 Claude Code / Cursor。
 
 **核心架构分三层：**
 
@@ -161,9 +161,9 @@ const result = await analyzeFunction(
 ```json
 {
   "mcpServers": {
-    "context-graph": {
+    "context-chain": {
       "command": "/bin/bash",
-      "args": ["/path/to/context-knowledge-graph/mcp-start.sh"]
+      "args": ["/path/to/context-chain/mcp-start.sh"]
     }
   }
 }
@@ -267,7 +267,7 @@ SUPERSEDES        — 新决策替代旧决策
 ## 目录结构
 
 ```
-context-knowledge-graph/
+context-chain/
 ├── docker-compose.yml
 ├── ckg.config.json                 # 项目配置：repos、AI provider
 ├── templates/                      # analyze_function 模板
@@ -283,6 +283,7 @@ context-knowledge-graph/
 │   │   └── index.ts                # 公共 API
 │   ├── runners/                    # CLI runners
 │   │   ├── analyze.ts              # 单函数 + 全量扫描
+│   │   ├── connect.ts              # 关键词归一化 + 决策关系连接
 │   │   └── cleanup-sessions.ts     # 独立清理命令
 │   ├── ai/                         # AI provider 抽象层
 │   │   ├── claude-cli.ts           # claude -p 实现
@@ -382,7 +383,7 @@ Not yet tested in production:
 - ⏳ 决策关系边（代码写完，需跑 refine 或 cold-start Round 4）
 
 Not yet implemented:
-- ⬜ connect_decisions 独立模块（关系边建立，从 pipeline 解耦）
+- ✅ connect_decisions 独立模块（关键词归一化 + PENDING 边 + 关系分析）
 - ⬜ 团队知识地图（Bus Factor 可视化）
 - ⬜ 出题式 KT 系统（核心产品假设验证）
 - ⬜ 团队共享 transcript 存储
