@@ -43,7 +43,7 @@ dashboard/fix-ports.js
 .claude/
 
 # Old Next.js dashboard prototype (replaced by src/dashboard/)
-dashboard/
+/dashboard/
 
 # Utility scripts not part of the project
 fix-sidebar.py

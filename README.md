@@ -1,80 +1,140 @@
 # Context Chain
 
-> **grep 找的是代码写了什么，我们记录的是代码为什么这样写。**
+> **grep finds what code does. We record why it was written that way.**
 
 ---
 
-## 为什么你需要这个
+## What is this
 
-在 AI 写代码的时代，开发者与 AI 的对话中包含大量决策理由——为什么选方案 A 而不是 B、当时还考虑过什么、这个 trade-off 是什么。但这些信息随着对话窗口关闭永久丢失。新功能、新成员、甚至三个月后的自己，都无法知道"为什么这样写"。
+When developers work with AI, conversations contain critical design decisions — why approach A was chosen over B, what tradeoffs were made, what alternatives were considered. But these insights vanish when the chat window closes.
 
-Context Chain 把这些散落的决策自动提取、存储为知识图谱，并通过 MCP 协议喂给 Claude Code / Cursor。
+Context Chain automatically extracts design decisions from your codebase, stores them as a knowledge graph, and serves them to Claude Code / Cursor via MCP.
 
-**核心架构分三层：**
+**Core architecture (3 layers):**
 
-1. **图谱层（neutral 存储+检索平台）** — Memgraph 图数据库，五槽位检索模型，不关心数据从哪来
-2. **Building block 层** — `analyze_function` 核心模块：输入一个函数 + 配置 → 查图谱 → 读代码 → 调 AI → 输出决策。高度可定制（上下文深度、代码粒度、prompt 模板、输出类型），用户可以保存多个模板
-3. **Runner 层** — 编排 building block 的执行方式。内置 full-scan runner（遍历 repo 所有函数，可暂停恢复），也可以自己写 runner
-
-Pipeline（cold-start、session ingestion）是参考实现，不是唯一入口。
+1. **Graph layer** — Memgraph stores code entities, decisions, and relationships. Five-slot retrieval model for precise context lookup.
+2. **Building block layer** — `analyze_function`: input a function + config, query graph for context, read source code, call AI, output decisions. Highly configurable via templates.
+3. **Runner layer** — Orchestrates building block execution. Built-in full-scan runner (pause/resume), cold-start pipeline (4-round goal-driven), and Quick Scan (zero-config one-click).
 
 ---
 
-## Quick Start
+## Getting Started
+
+### Prerequisites
+
+- **Node.js** v18+
+- **Docker** (for Memgraph)
+- **Joern** — code structure analysis (`brew install joern` on macOS)
+- **Claude CLI** or **Anthropic API key** — for AI-powered analysis
 
 ```bash
-# 1. 启动 Memgraph
+# Install Claude CLI (if using subscription)
+npm install -g @anthropic-ai/claude-code
+claude login
+
+# Or use Anthropic API instead — configure in the Dashboard
+```
+
+### Setup
+
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Start Memgraph
 docker compose up -d
 
-# 2. 初始化 schema
+# 3. Start the Dashboard
+npm run dashboard
+# Open http://localhost:3001
+```
+
+### First Run (Dashboard)
+
+1. Go to **System** page — add your repos (name, path, type)
+2. Generate CPG files with Joern for each repo
+3. Click **Full Setup** on the System page (schema + ingest + link)
+4. Go to **Quick Scan** — select a repo, click Scan
+5. Design decisions appear automatically — no goal or business context needed
+
+### First Run (CLI)
+
+```bash
+# 1. Initialize schema
 npm run db:schema
 
-# 3. 导入代码结构（需要先用 Joern 生成 CPG）
+# 2. Import code structure (requires Joern CPG)
 npm run ingest:cpg -- --file data/your-repo.json
 
-# 4. 分析单个函数试试效果
+# 3. Try analyzing a single function
 npm run analyze -- --function createOrder --file store/orderStore.js --repo my-repo
 
-# 5. 全量扫描（可 Ctrl+C 暂停，--continue 恢复）
+# 4. Full scan (Ctrl+C to pause, --continue to resume)
 npm run analyze -- --repo my-repo --cleanup
 
-# 6. 启动 MCP Server（Claude Code / Cursor 自动调用）
+# 5. Start MCP Server (Claude Code / Cursor auto-connects)
 npm run mcp
 ```
 
 ---
 
-## analyze_function — 核心 Building Block
+## Configuration
 
-所有决策提取最终都通过这个模块。它是高度可配置的：
+Create `ckg.config.json` in the project root (see `ckg.config.example.json`):
 
-### 配置维度
+```json
+{
+  "project": "my-project",
+  "ai": {
+    "provider": "claude-cli"
+  },
+  "repos": [
+    {
+      "name": "my-service",
+      "path": "/absolute/path/to/repo",
+      "type": "backend",
+      "cpgFile": "data/my-service.json",
+      "packages": []
+    }
+  ]
+}
+```
 
-| 维度 | 可配置项 |
-|------|---------|
-| 上下文深度 | `caller_depth` (0-2层), `callee_depth` (0-2层), `max_callers_per_level`, `include_cross_repo`, `include_table_access` |
-| 代码粒度 | `target_code` (full/truncated/signature_only), `caller_code`, `callee_code`, `target_max_lines`, `include_file_context` |
-| 输出控制 | `finding_types` (decision/suboptimal/bug), `max_decisions`, `summary_length`, `language`, `extract_keywords` |
-| Prompt | `prompt_template` (自定义模板), `system_prompt`, `custom_context` |
+**AI providers:**
+- `claude-cli` — Uses Claude CLI subscription (no API cost). Requires `claude login`.
+- `anthropic-api` — Direct API calls. Set `apiKey` in config or Dashboard.
+
+---
+
+## analyze_function — Core Building Block
+
+All decision extraction goes through this module. Highly configurable:
+
+### Configuration
+
+| Dimension | Options |
+|-----------|---------|
+| Context depth | `caller_depth` (0-2), `callee_depth` (0-2), `include_cross_repo`, `include_table_access` |
+| Code granularity | `target_code` (full/truncated/signature_only), `target_max_lines`, `include_file_context` |
+| Output control | `finding_types` (decision/suboptimal/bug), `max_decisions`, `summary_length`, `language` |
+| Prompt | `prompt_template`, `system_prompt`, `custom_context` |
 | AI | `ai_provider`, `model`, `timeout_ms` |
 
-### 模板系统
+### Template System
 
-配置保存为 JSON 模板文件，支持继承：
+Templates are JSON files with inheritance:
 
 ```
 templates/
-  _default.json           ← 内置默认值（所有字段）
-  quick-scan.json         ← extends _default, 只 override 想改的字段
+  _default.json           <- built-in defaults
+  quick-scan.json         <- extends _default, overrides specific fields
   deep-analysis.json
   your-custom.json
 ```
 
 ```json
-// templates/quick-scan.json
 {
   "name": "Quick Scan",
-  "description": "快速扫描，不看上下游",
   "extends": "_default",
   "caller_depth": 0,
   "callee_depth": 0,
@@ -83,81 +143,75 @@ templates/
 }
 ```
 
-### CLI
+### CLI Usage
 
 ```bash
-# 列出可用模板
+# List available templates
 npm run analyze -- --list-templates
 
-# 单函数分析
-npm run analyze -- --function addItem --file store/cartStore.js --repo bite-me-website
+# Single function analysis
+npm run analyze -- --function addItem --file store/cartStore.js --repo my-repo
 
-# 指定模板
-npm run analyze -- --function addItem --file store/cartStore.js --repo bite-me-website --template deep-analysis
+# With specific template
+npm run analyze -- --function addItem --file store/cartStore.js --repo my-repo --template deep-analysis
 
-# 全量扫描（逐函数，可暂停恢复）
-npm run analyze -- --repo bite-me-website
-npm run analyze -- --repo bite-me-website --continue
+# Full scan (all functions in a repo)
+npm run analyze -- --repo my-repo
+npm run analyze -- --repo my-repo --continue      # resume from checkpoint
+npm run analyze -- --repo my-repo --force --cleanup  # force re-analyze + cleanup
 
-# 强制重新分析所有函数
-npm run analyze -- --repo bite-me-website --force
+# Budget control
+npm run analyze -- --repo my-repo --budget 500000
 
-# Budget 控制
-npm run analyze -- --repo bite-me-website --budget 500000
-
-# 跑完自动清理 claude -p 产生的 session 文件
-npm run analyze -- --repo bite-me-website --cleanup
-
-# CLI 覆盖配置
-npm run analyze -- --repo bite-me-website --caller-depth 2 --include-tables --language zh
+# CLI config overrides
+npm run analyze -- --repo my-repo --caller-depth 2 --include-tables --language en
 ```
 
-### 作为库使用
+### As a Library
 
 ```typescript
 import { analyzeFunction, loadTemplate } from './core'
 
 const result = await analyzeFunction(
   { functionName: 'createOrder', filePath: 'store/orderStore.js', repo: 'my-repo', repoPath: '/path/to/repo' },
-  { caller_depth: 2, include_table_access: true },  // 部分覆盖
-  'deep-analysis'  // 模板名
+  { caller_depth: 2, include_table_access: true },
+  'deep-analysis'
 )
-
 // result.decisions — PendingDecisionOutput[]
 // result.metadata — { template_used, caller_count, callee_count, token_usage, duration_ms }
 ```
 
 ---
 
-## MCP Server — 9 个工具
+## MCP Server — 9 Tools
 
-| 工具 | 说明 |
-|------|------|
-| `get_code_structure` | 查某个文件/服务下有哪些函数 |
-| `get_callers` | 查谁调用了某个函数（上游依赖） |
-| `get_callees` | 查某个函数调用了谁（下游依赖） |
-| `search_decisions_by_keyword` | 按关键词搜索决策（倒排索引 + 全文兜底） |
-| `get_context_for_code` | 五槽位融合检索 + 渐进披露（summary → detail → 单条展开） |
-| `search_decisions_semantic` | 语义向量搜索（需配置 embedding provider） |
-| `get_decision_relationships` | 查决策的因果/依赖/冲突关系链 |
-| `get_cross_repo_dependencies` | 查跨 repo / 跨服务的依赖关系 |
-| `report_context_usage` | 反馈回路：哪些决策被实际使用 |
+| Tool | Description |
+|------|-------------|
+| `get_code_structure` | List functions/services in a file |
+| `get_callers` | Who calls this function (upstream) |
+| `get_callees` | What this function calls (downstream) |
+| `search_decisions_by_keyword` | Keyword search with inverted index + full-text fallback |
+| `get_context_for_code` | Five-slot retrieval with progressive disclosure |
+| `search_decisions_semantic` | Vector similarity search (requires embedding provider) |
+| `get_decision_relationships` | Explore causal/dependency/conflict chains |
+| `get_cross_repo_dependencies` | Cross-repo and cross-service dependencies |
+| `report_context_usage` | Feedback loop: which decisions were actually used |
 
-### 五槽位检索优先级
+### Five-Slot Retrieval
 
-`get_context_for_code` 按优先级依次查五个通道：
+`get_context_for_code` queries five channels in priority order:
 
-1. **P0 精确锚点** — 函数级 ANCHORED_TO 匹配
-2. **P1 模糊锚点** — 文件级 APPROXIMATE_TO 匹配
-3. **P2 关键词** — keywords 数组 CONTAINS 匹配
-4. **P3 关系边展开** — 对 P0-P2 命中的做一跳 CAUSED_BY/DEPENDS_ON/CONFLICTS_WITH 展开
-5. **P4 语义兜底** — 向量相似度搜索（需配置 embedding）
+1. **P0 Exact anchor** — function-level ANCHORED_TO match
+2. **P1 Fuzzy anchor** — file-level APPROXIMATE_TO match
+3. **P2 Keywords** — keyword array CONTAINS match
+4. **P3 Relationship expansion** — one-hop CAUSED_BY/DEPENDS_ON/CONFLICTS_WITH from P0-P2 hits
+5. **P4 Semantic fallback** — vector similarity (requires embedding config)
 
-渐进披露：默认返回 summary 列表，传 `detail=true` 返回完整内容，传 `decision_id` 展开单条 + 2跳关系链。
+Progressive disclosure: returns summary list by default, `detail=true` for full content, `decision_id` for single decision + 2-hop chain.
 
-### 接入方式
+### Connect to Claude Code
 
-**Claude Code** — `.mcp.json`：
+Add to your project's `.mcp.json`:
 ```json
 {
   "mcpServers": {
@@ -171,195 +225,186 @@ const result = await analyzeFunction(
 
 ---
 
-## 后台精炼管线
-
-```bash
-npm run refine                          # 全部 5 个子任务
-npm run refine -- --only staleness      # 只跑 staleness 检测
-npm run refine -- --budget 200000       # Token 限额
-```
-
-5 个子任务：
-
-1. **Staleness 检测** — 对比 git HEAD，标记代码已变化的决策为 stale
-2. **锚点精度提升** — APPROXIMATE_TO → ANCHORED_TO 升级（当决策 summary 包含函数名时）
-3. **关键词归一化** — LLM 合并同义词（"鉴权" = "auth" = "认证"）
-4. **决策边补全** — 同文件决策对关系分析（CAUSED_BY / DEPENDS_ON / CONFLICTS_WITH）
-5. **空洞检测** — 找出高调用量但无决策覆盖的函数，输出 `data/coverage-report.json`
-
----
-
 ## Dashboard
 
 ```bash
 npm run dashboard    # http://localhost:3001
 ```
 
-| 页面 | 功能 |
-|------|------|
-| Overview | 统计数字、repo 覆盖率、关键词云、最近决策 |
-| Decisions | 决策列表 + 搜索 + 按类型/repo 过滤 |
-| Relationships | 决策关系图可视化 |
-| Coverage | 文件级/函数级决策覆盖率 |
-| Dependencies | 跨 repo 依赖力导向图 |
-| Feedback | 反馈日志（哪些决策被使用） |
-| Sessions | Claude Code session 摄入（3阶段 pipeline） |
-| **Templates** | **模板编辑器：可视化管理 analyze_function 配置** |
-| Pipeline | Prompt 模板编辑器（cold-start 专用） |
-| Run / Schedule | 一键运行 + 定时任务 |
-| Query | 直接执行 Cypher 查询 |
-| System | Memgraph 状态 + 配置验证 |
+| Page | Description |
+|------|-------------|
+| **Overview** | Stats, repo coverage, keyword cloud, recent decisions |
+| **Decisions** | Browse + search + filter decisions by type/repo |
+| **Relationships** | Decision relationship graph visualization |
+| **Coverage** | File/function-level decision coverage |
+| **Dependencies** | Cross-repo dependency force graph |
+| **Feedback** | Usage log — which decisions are being used |
+| **Sessions** | Ingest decisions from AI coding sessions |
+| **Templates** | Visual editor for analyze_function configs |
+| **Pipeline** | Prompt template editor for cold-start pipeline |
+| **Run / Schedule** | One-click pipeline execution + cron scheduling |
+| **Quick Scan** | Select a repo, get decisions instantly — no goal needed |
+| **Getting Started** | Step-by-step onboarding with live status checks |
+| **Query** | Execute raw Cypher queries |
+| **System** | Memgraph status, repo config, AI provider, setup actions |
 
 ---
 
-## 技术栈
+## Refinement Pipeline
 
-| 组件 | 技术 | 用途 |
-|------|------|------|
-| 图数据库 | Memgraph | 代码结构 + 决策节点 + 关系边 |
-| 可视化 | Memgraph Lab | 图谱浏览 (`localhost:3000`) |
-| 代码分析 | Joern | CPG 生成（函数调用、数据流） |
-| 决策提取 | `claude -p` (subscription) | 核心 AI 调用通道 |
-| Embedding | Voyage AI | 语义向量搜索（可选） |
-| MCP Server | TypeScript + `@modelcontextprotocol/sdk` | 9 个查询/反馈工具 |
-| Dashboard | Hono + 原生 HTML/JS | 管理界面 |
-| 容器 | Docker Compose | Memgraph + Lab |
+```bash
+npm run refine                          # all 5 tasks
+npm run refine -- --only staleness      # single task
+npm run refine -- --budget 200000       # with token budget
+```
+
+5 tasks:
+
+1. **Staleness detection** — compare against git HEAD, mark changed decisions as stale
+2. **Anchor precision upgrade** — APPROXIMATE_TO to ANCHORED_TO (when summary contains function name)
+3. **Keyword normalization** — LLM merges synonyms into canonical forms
+4. **Decision edge completion** — analyze same-file decision pairs for CAUSED_BY / DEPENDS_ON / CONFLICTS_WITH
+5. **Gap detection** — find high-call-count functions with zero decision coverage
 
 ---
 
-## 数据模型
+## Data Model
 
-### 节点类型
-
-```
-CodeEntity        — 代码实体：service / file / function / api_endpoint
-DecisionContext   — 设计决策：为什么这样写、trade-off、被否决的方案
-AggregatedSummary — 聚合摘要（后台精炼生成）
-```
-
-### 边类型
+### Node Types
 
 ```
-# 代码结构（Joern / LLM）
-CONTAINS          — 服务→文件→函数
-CALLS             — 函数调用函数
-CALLS_CROSS_REPO  — 跨 repo 函数调用
-DEPENDS_ON_API    — 跨服务 API 依赖
-ACCESSES_TABLE    — 函数访问数据库表
-REFERENCES_TABLE  — SQL 函数查表
-TRIGGERED_ON      — Trigger 绑表
-TRIGGERS_FUNCTION — Trigger 调函数
+CodeEntity        — Code structure: service / file / function / api_endpoint
+DecisionContext   — Design decision: why, tradeoffs, rejected alternatives
+AggregatedSummary — Aggregated summary (generated by refinement)
+```
 
-# 决策锚定
-ANCHORED_TO       — DecisionContext → CodeEntity（精确）
-APPROXIMATE_TO    — DecisionContext → CodeEntity（模糊）
+### Edge Types
 
-# 决策关系
-CAUSED_BY         — 决策 A 是因为决策 B
-DEPENDS_ON        — 决策 A 依赖决策 B 成立
-CONFLICTS_WITH    — 决策 A 和 B 有张力/trade-off
-CO_DECIDED        — 同一次决策中一起做出的
-SUPERSEDES        — 新决策替代旧决策
+```
+# Code structure (from Joern / LLM)
+CONTAINS          — service -> file -> function
+CALLS             — function calls function
+CALLS_CROSS_REPO  — cross-repo function call
+DEPENDS_ON_API    — cross-service API dependency
+ACCESSES_TABLE    — function accesses database table
+
+# Decision anchoring
+ANCHORED_TO       — DecisionContext -> CodeEntity (precise)
+APPROXIMATE_TO    — DecisionContext -> CodeEntity (fuzzy)
+
+# Decision relationships
+CAUSED_BY         — decision A exists because of decision B
+DEPENDS_ON        — decision A requires decision B
+CONFLICTS_WITH    — decisions A and B have tension/tradeoff
+CO_DECIDED        — made together in the same decision session
+SUPERSEDES        — new decision replaces old decision
 ```
 
 ---
 
-## 目录结构
+## Tech Stack
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| Graph DB | Memgraph | Code structure + decision nodes + relationships |
+| Visualization | Memgraph Lab | Graph browser (`localhost:3000`) |
+| Code Analysis | Joern | CPG generation (function calls, data flow) |
+| Decision Extraction | Claude CLI / Anthropic API | Core AI calls |
+| Embedding | Voyage AI | Semantic vector search (optional) |
+| MCP Server | TypeScript + `@modelcontextprotocol/sdk` | 9 query/feedback tools |
+| Dashboard | Hono + vanilla HTML/JS | Management UI (15 pages) |
+| Container | Docker Compose | Memgraph + Lab |
+
+---
+
+## All Commands
+
+```bash
+# Infrastructure
+docker compose up -d               # Start Memgraph
+npm run db:schema                  # Initialize schema
+npm run db:reset                   # Clear entire graph
+
+# Core — analyze_function
+npm run analyze -- --list-templates                     # List templates
+npm run analyze -- --function X --file Y --repo Z       # Single function
+npm run analyze -- --repo Z                             # Full scan
+npm run analyze -- --repo Z --continue                  # Resume from checkpoint
+npm run analyze -- --repo Z --force --cleanup           # Force re-analyze + cleanup
+
+# Code structure
+npm run ingest:cpg -- --file X     # Import CPG
+npm run link:repos                 # Cross-repo calls
+npm run link:services              # Cross-service dependencies
+npm run link:tables                # Table access relationships
+
+# Pipelines
+npm run cold-start:v2 -- --goal X  # Cold-start 4-round pipeline
+npm run ingest:sessions:v2         # Session ingestion
+
+# Decision relationships
+npm run connect                    # Normalize keywords + process PENDING edges
+npm run connect -- --budget 200000 # With token budget
+
+# Refinement
+npm run refine                     # All 5 refinement tasks
+npm run embed:decisions            # Generate embeddings
+
+# Cleanup
+npm run cleanup                    # Delete pipeline session files
+npm run cleanup -- --dry-run       # Preview only
+
+# Services
+npm run mcp                        # MCP Server
+npm run dashboard                  # Dashboard (localhost:3001)
+```
+
+---
+
+## Project Structure
 
 ```
 context-chain/
 ├── docker-compose.yml
-├── ckg.config.json                 # 项目配置：repos、AI provider
-├── templates/                      # analyze_function 模板
+├── ckg.config.json                 # Project config (repos, AI provider)
+├── ckg.config.example.json         # Example config template
+├── templates/                      # analyze_function templates
 │   ├── _default.json
 │   ├── quick-scan.json
 │   └── deep-analysis.json
 ├── src/
-│   ├── core/                       # 核心 building blocks
-│   │   ├── analyze-function.ts     # 单函数分析（核心模块）
-│   │   ├── template-loader.ts      # 模板加载/继承/合并
-│   │   ├── session-cleanup.ts      # Claude session 清理
-│   │   ├── types.ts                # 类型定义
-│   │   └── index.ts                # 公共 API
+│   ├── core/                       # Core building blocks
+│   │   ├── analyze-function.ts     # Single function analysis
+│   │   ├── template-loader.ts      # Template loading/inheritance
+│   │   └── types.ts
 │   ├── runners/                    # CLI runners
-│   │   ├── analyze.ts              # 单函数 + 全量扫描
-│   │   ├── connect.ts              # 关键词归一化 + 决策关系连接
-│   │   └── cleanup-sessions.ts     # 独立清理命令
-│   ├── ai/                         # AI provider 抽象层
-│   │   ├── claude-cli.ts           # claude -p 实现
-│   │   ├── anthropic-api.ts        # Anthropic API 实现
+│   │   ├── analyze.ts              # Single function + full scan
+│   │   ├── connect.ts              # Keyword normalization + relationship connection
+│   │   └── cleanup-sessions.ts
+│   ├── ai/                         # AI provider abstraction
+│   │   ├── claude-cli.ts           # Claude CLI implementation
+│   │   ├── anthropic-api.ts        # Anthropic API implementation
 │   │   ├── embeddings.ts           # Voyage AI embedding
-│   │   ├── vector-store.ts         # 本地 JSON 向量存储
-│   │   └── budget.ts               # Token 预算管理
+│   │   └── budget.ts               # Token budget management
 │   ├── mcp/
-│   │   └── server.ts               # MCP Server（9 个工具）
-│   ├── ingestion/                   # 数据摄入管线
-│   │   ├── connect-decisions.ts    # 决策关系连接（PENDING 边管理 + 分组 + LLM 关系分析）
-│   │   ├── normalize-keywords.ts   # 全局关键词归一化
-│   │   ├── cold-start-v2.ts        # Cold-start 4 轮 pipeline（模板/参考实现）
-│   │   ├── ingest-sessions-v2.ts   # Session 摄入 3 阶段 pipeline
-│   │   ├── refine.ts               # 后台精炼 5 个子任务
-│   │   ├── embed-decisions.ts      # Embedding 生成
-│   │   ├── feedback.ts             # 反馈日志
-│   │   ├── shared.ts               # 共享工具函数
-│   │   ├── ingest-cpg.ts           # CPG → Memgraph
-│   │   ├── link-repos.ts           # 跨 repo 调用关系
-│   │   ├── link-services.ts        # 跨服务 API 依赖
-│   │   ├── link-tables.ts          # 数据库表访问关系
-│   │   └── parse-sql.ts            # SQL migration 解析
-│   ├── prompts/                     # Prompt 模板
-│   ├── db/                          # Memgraph 连接/schema
-│   └── dashboard/                   # Dashboard UI + API
-│       ├── server.ts
-│       └── public/ (16 页面 + sidebar.js)
-├── data/                            # 运行状态（git ignored）
-└── joern/                           # Joern CPG 脚本
-```
-
----
-
-## 可用命令
-
-```bash
-# 基础设施
-docker compose up -d               # 启动 Memgraph
-npm run db:schema                  # 初始化 schema
-npm run db:reset                   # 清空图谱
-
-# 核心 — analyze_function
-npm run analyze -- --list-templates                     # 列出模板
-npm run analyze -- --function X --file Y --repo Z       # 单函数
-npm run analyze -- --repo Z                             # 全量扫描
-npm run analyze -- --repo Z --continue                  # 从断点继续
-npm run analyze -- --repo Z --force --cleanup           # 强制重跑 + 清理
-
-# 清理 claude -p session
-npm run cleanup                    # 删除所有 pipeline session
-npm run cleanup -- --dry-run       # 只扫描不删除
-
-# 代码结构
-npm run ingest:cpg -- --file X     # 导入 CPG
-npm run link:repos                 # 跨 repo 调用
-npm run link:services              # 跨服务依赖
-npm run link:tables                # 表访问关系
-
-# Legacy pipelines（模板/参考实现）
-npm run cold-start:v2 -- --goal X  # Cold-start 4 轮
-npm run ingest:sessions            # Session 摄入 v1
-npm run ingest:sessions:v2         # Session 摄入 v2
-
-# 决策关系连接
-npm run connect                    # 归一化关键词 + 消化 PENDING 边
-npm run connect -- --budget 200000 # 带预算限制
-npm run connect -- --skip-normalize # 只连接，不归一化
-
-# 后台
-npm run refine                     # 精炼管线
-npm run embed:decisions            # 生成 embedding
-
-# 服务
-npm run mcp                        # MCP Server
-npm run dashboard                  # Dashboard (localhost:3001)
+│   │   └── server.ts               # MCP Server (9 tools)
+│   ├── ingestion/                  # Data ingestion pipelines
+│   │   ├── cold-start-v2.ts        # 4-round pipeline
+│   │   ├── quick-scan.ts           # Zero-config scan (filesystem-based)
+│   │   ├── ingest-sessions-v2.ts   # Session ingestion
+│   │   ├── refine.ts               # Refinement (5 tasks)
+│   │   ├── ingest-cpg.ts           # CPG -> Memgraph
+│   │   ├── link-repos.ts           # Cross-repo call linking
+│   │   └── ...
+│   ├── db/                         # Memgraph connection/schema
+│   └── dashboard/                  # Dashboard UI + API
+│       ├── server.ts               # Hono API server
+│       ├── public/shared.css       # Shared styles
+│       ├── public/sidebar.js       # Sidebar + i18n
+│       └── public/*.html           # 15 page files
+├── data/                           # Runtime data (gitignored)
+├── scripts/                        # Setup and utility scripts
+└── joern/                          # Joern CPG extraction scripts
 ```
 
 ---
@@ -367,26 +412,20 @@ npm run dashboard                  # Dashboard (localhost:3001)
 ## Status
 
 Working:
-- ✅ analyze_function 核心模块 + 模板系统
-- ✅ Full-scan runner（暂停恢复、去重、budget、进度预估）
-- ✅ MCP Server（9 个工具，五槽位检索 + 渐进披露 + 反馈回路）
-- ✅ 后台精炼管线（5 个子任务）
-- ✅ Dashboard（16 页面，含模板编辑器）
-- ✅ 语义向量搜索模块（Voyage AI + 本地向量存储）
-- ✅ Session ingestion v2（3 阶段 pipeline）
-- ✅ 代码结构层（Joern CPG + SQL 解析 + 跨 repo/服务/表关系）
-- ✅ Pipeline session 清理（标记 + 扫描删除）
+- analyze_function core module + template system
+- Full-scan runner (pause/resume, dedup, budget, progress estimation)
+- MCP Server (9 tools, five-slot retrieval + progressive disclosure + feedback loop)
+- Refinement pipeline (5 tasks)
+- Dashboard (15 pages, including template editor, Quick Scan, onboarding)
+- Semantic vector search module (Voyage AI + local vector store)
+- Session ingestion v2 (3-stage pipeline)
+- Code structure layer (Joern CPG + SQL parsing + cross-repo/service/table linking)
+- Pipeline session cleanup
 
 Not yet tested in production:
-- ⏳ 语义向量搜索（代码写完，需配置 Voyage API key + 跑 embed:decisions）
-- ⏳ 后台精炼管线（代码写完，未跑过）
-- ⏳ 决策关系边（代码写完，需跑 refine 或 cold-start Round 4）
-
-Not yet implemented:
-- ✅ connect_decisions 独立模块（关键词归一化 + PENDING 边 + 关系分析）
-- ⬜ 团队知识地图（Bus Factor 可视化）
-- ⬜ 出题式 KT 系统（核心产品假设验证）
-- ⬜ 团队共享 transcript 存储
+- Semantic vector search (code complete, needs Voyage API key + embed:decisions run)
+- Refinement pipeline (code complete, not yet run)
+- Decision relationship edges (code complete, needs refine or cold-start Round 4)
 
 ---
 

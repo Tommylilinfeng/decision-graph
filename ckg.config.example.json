@@ -1,0 +1,15 @@
+{
+  "project": "my-project",
+  "ai": {
+    "provider": "claude-cli"
+  },
+  "repos": [
+    {
+      "name": "my-service",
+      "path": "/absolute/path/to/repo",
+      "type": "backend",
+      "cpgFile": "data/my-service.json",
+      "packages": []
+    }
+  ]
+}

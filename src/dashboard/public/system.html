@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CKG — System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<style>
+.action-btns{display:flex;flex-wrap:wrap;gap:10px}
+</style>
+</head>
+<body>
+<nav class="sidebar" id="sidebar"></nav>
+<script src="/sidebar.js"></script>
+<div class="main">
+  <div class="page-hero">
+    <h2>System</h2>
+    <p class="subtitle">Memgraph connection, repo configuration, and infrastructure management.</p>
+  </div>
+  <div class="content">
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head"><h3>Memgraph</h3><span id="mgBadge" class="badge badge-yellow">checking...</span></div>
+        <div class="card-body" id="mgInfo" style="font-size:13px;color:var(--text-dim)">Connecting...</div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Config</h3><span id="cfgBadge" class="badge badge-yellow">checking...</span></div>
+        <div class="card-body" id="cfgInfo" style="font-size:13px;color:var(--text-dim)">Loading...</div>
+      </div>
+    </div>
+
+    <div class="card mb-6">
+      <div class="card-head"><h3>Data Per Repo</h3><button class="btn-ghost" id="addRepoToggle" onclick="toggleAddRepo()">+ Add Repo</button></div>
+      <div id="addRepoForm" style="display:none;padding:20px;border-bottom:1px solid var(--border-subtle);background:var(--surface-0)">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Name</label>
+            <input type="text" id="repoName" placeholder="my-service" style="width:100%;padding:8px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:13px;outline:none">
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Type</label>
+            <select id="repoType" style="width:100%;padding:8px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--sans);font-size:13px;outline:none;cursor:pointer">
+              <option value="frontend">frontend</option>
+              <option value="backend">backend</option>
+              <option value="shared-lib">shared-lib</option>
+              <option value="infra">infra</option>
+              <option value="monorepo">monorepo</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-bottom:12px">
+          <label style="display:block;font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Path</label>
+          <input type="text" id="repoPath" placeholder="/absolute/path/to/repo" style="width:100%;padding:8px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:13px;outline:none">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">CPG File <span style="font-weight:400;text-transform:none">(optional)</span></label>
+            <input type="text" id="repoCpg" placeholder="data/my-service.json" style="width:100%;padding:8px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:13px;outline:none">
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Packages <span style="font-weight:400;text-transform:none">(comma-separated)</span></label>
+            <input type="text" id="repoPackages" placeholder="@scope/name" style="width:100%;padding:8px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:13px;outline:none">
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="btn-primary" style="width:auto" onclick="addRepo()">Add</button>
+          <button class="btn-ghost" onclick="toggleAddRepo()">Cancel</button>
+          <span id="addRepoMsg" style="font-size:12px;margin-left:8px"></span>
+        </div>
+      </div>
+      <div class="card-body" id="sysRepos"><span style="color:var(--text-dim)">Loading...</span></div>
+    </div>
+
+    <div class="card mb-6">
+      <div class="card-head"><h3>AI Provider</h3></div>
+      <div class="card-body">
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Provider</label>
+            <select id="sysAiProvider" onchange="document.getElementById('sysApiKeyGroup').style.display=this.value==='anthropic-api'?'':'none'" style="padding:8px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:13px;outline:none;min-width:200px">
+              <option value="claude-cli">Claude CLI (subscription)</option>
+              <option value="anthropic-api">Anthropic API (key)</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Model</label>
+            <input id="sysAiModel" type="text" placeholder="auto" style="padding:8px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:13px;outline:none;min-width:200px">
+          </div>
+          <div id="sysApiKeyGroup" style="display:none">
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">API Key</label>
+            <input id="sysAiApiKey" type="password" placeholder="sk-ant-..." style="padding:8px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:13px;outline:none;min-width:200px">
+          </div>
+          <div style="align-self:flex-end">
+            <button class="btn-primary" style="width:auto" onclick="saveSysAI()">Save</button>
+          </div>
+          <span id="sysAiMsg" style="font-size:12px;color:var(--green);align-self:flex-end"></span>
+        </div>
+        <div style="font-size:12px;color:var(--text-dim);margin-top:10px">
+          Claude CLI requires <code style="font-family:var(--mono);font-size:11px;background:var(--surface-2);padding:2px 6px;border-radius:3px">npm i -g @anthropic-ai/claude-code && claude login</code> in terminal first.
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-6">
+      <div class="card-head"><h3>Actions</h3></div>
+      <div class="card-body">
+        <div class="action-btns">
+          <button class="btn-primary" onclick="runSetup('full-setup')">Full Setup</button>
+          <button class="btn-ghost" onclick="runSetup('schema')">Schema</button>
+          <button class="btn-ghost" onclick="runSetup('ingest-all')">Ingest CPG</button>
+          <button class="btn-ghost" onclick="runSetup('link-all')">Link Repos</button>
+          <button class="btn-danger" onclick="if(confirm('Delete ALL decisions?'))runSetup('clear-decisions')">Clear Decisions</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-dim);margin-top:10px">
+          Full Setup = Schema + Ingest all CPG files + Link repos &amp; services
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>Setup Log</h3><span id="setupBadge" class="badge" style="display:none"></span></div>
+      <div class="card-body setup-log" id="setupLog"><span style="color:var(--text-dim);font-style:italic">Click an action above to begin...</span></div>
+    </div>
+
+  </div>
+</div>
+<script>
+function esc(s){return !s?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+async function loadSystem(){
+  try {
+    const s = await fetch('/api/system/status').then(r=>r.json())
+
+    // Memgraph
+    if(s.memgraph.connected){
+      document.getElementById('mgBadge').className='badge badge-green'
+      document.getElementById('mgBadge').textContent='connected'
+      document.getElementById('mgInfo').innerHTML=`<span class="dot dot-green"></span> &nbsp;${s.totals.codeEntities} entities, ${s.totals.decisions} decisions, ${s.totals.callEdges} call edges, ${s.totals.anchoredEdges} anchors`
+    } else {
+      document.getElementById('mgBadge').className='badge badge-red'
+      document.getElementById('mgBadge').textContent='disconnected'
+      document.getElementById('mgInfo').innerHTML=`<span class="dot dot-red"></span> &nbsp;${esc(s.memgraph.error)||'Cannot connect'}<br><br>Run: <code>docker compose up -d</code>`
+    }
+
+    // Config
+    if(s.config.loaded){
+      document.getElementById('cfgBadge').className='badge badge-green'
+      document.getElementById('cfgBadge').textContent=s.config.repos.length+' repos'
+      document.getElementById('cfgInfo').innerHTML=s.config.repos.map(r=>
+        `<div style="display:flex;align-items:center;gap:8px;padding:4px 0"><span class="dot ${r.cpgExists?'dot-green':'dot-red'}"></span><span>${esc(r.name)}</span><span class="badge" style="background:var(--surface-2);color:var(--text-dim)">${r.type}</span>${r.cpgExists?'<span style="color:var(--green);font-size:11px">CPG ready</span>':'<span style="color:var(--red);font-size:11px">CPG missing</span>'}</div>`
+      ).join('')
+    } else {
+      document.getElementById('cfgBadge').className='badge badge-red'
+      document.getElementById('cfgBadge').textContent='error'
+      document.getElementById('cfgInfo').innerHTML=`<span class="dot dot-red"></span> &nbsp;${esc(s.config.error)}`
+    }
+
+    // Repos
+    if(s.repos.length>0){
+      document.getElementById('sysRepos').innerHTML=s.repos.map(r=>{
+        const ents=Object.entries(r.entities).map(([k,v])=>`<span class="badge badge-blue">${v} ${k}</span>`).join(' ')
+        return `<div class="list-row"><div><span class="name">${esc(r.name)}</span><div style="margin-top:4px">${ents}</div></div><div style="display:flex;align-items:center;gap:8px"><div class="badges"><span class="badge badge-green">${r.decisions} decisions</span><span class="badge badge-yellow">${r.calls} calls</span></div><button class="btn-ghost" style="padding:4px 8px;font-size:11px;color:var(--red);border-color:transparent" onclick="deleteRepo('${esc(r.name)}')" title="Remove from config">x</button></div></div>`
+      }).join('')
+    } else {
+      document.getElementById('sysRepos').innerHTML=`<div style="color:var(--text-dim);padding:8px 0">${s.memgraph.connected?'No data loaded. Click "Full Setup" in the Actions card below.':'Memgraph not connected. Run <code style="font-family:var(--mono);font-size:12px">docker compose up -d</code> first, then refresh.'}</div>`
+    }
+  } catch(e){
+    document.getElementById('mgBadge').className='badge badge-red'
+    document.getElementById('mgBadge').textContent='error'
+    document.getElementById('mgInfo').textContent=e.message
+  }
+}
+
+let setupES=null
+async function runSetup(command){
+  const logEl=document.getElementById('setupLog')
+  const badge=document.getElementById('setupBadge')
+  logEl.innerHTML=''
+  badge.style.display='inline-block'
+  badge.className='badge badge-yellow'
+  badge.textContent='running...'
+
+  try {
+    const res=await fetch('/api/system/run',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({command})
+    })
+    if(!res.ok){const e=await res.json();logEl.textContent='Error: '+(e.error||'Failed');badge.className='badge badge-red';badge.textContent='error';return}
+
+    if(setupES) setupES.close()
+    setupES=new EventSource('/api/system/run/stream')
+    setupES.addEventListener('log',e=>{
+      const div=document.createElement('div')
+      div.textContent=e.data
+      if(e.data.includes('\u2713')) div.style.color='var(--green)'
+      else if(e.data.includes('\u274c')) div.style.color='var(--red)'
+      else if(e.data.includes('\u2501')){div.style.color='var(--accent)';div.style.fontWeight='700'}
+      logEl.appendChild(div)
+      logEl.scrollTop=logEl.scrollHeight
+    })
+    setupES.addEventListener('status',e=>{
+      badge.className='badge '+(e.data==='done'?'badge-green':'badge-red')
+      badge.textContent=e.data
+      setupES.close();setupES=null
+      loadSystem()
+    })
+    setupES.onerror=()=>{badge.className='badge badge-red';badge.textContent='error';setupES.close();setupES=null}
+  } catch(e){logEl.textContent=e.message;badge.className='badge badge-red';badge.textContent='error'}
+}
+
+function toggleAddRepo() {
+  const form = document.getElementById('addRepoForm')
+  form.style.display = form.style.display === 'none' ? 'block' : 'none'
+  document.getElementById('addRepoMsg').textContent = ''
+}
+
+async function addRepo() {
+  const name = document.getElementById('repoName').value.trim()
+  const repoPath = document.getElementById('repoPath').value.trim()
+  const type = document.getElementById('repoType').value
+  const cpgFile = document.getElementById('repoCpg').value.trim() || undefined
+  const packagesRaw = document.getElementById('repoPackages').value.trim()
+  const packages = packagesRaw ? packagesRaw.split(',').map(s => s.trim()).filter(Boolean) : []
+  const msg = document.getElementById('addRepoMsg')
+
+  if (!name || !repoPath) {
+    msg.style.color = 'var(--red)'
+    msg.textContent = 'Name and path are required'
+    return
+  }
+
+  try {
+    const res = await fetch('/api/repos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, repoPath, type, cpgFile, packages })
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      msg.style.color = 'var(--red)'
+      msg.textContent = data.error || 'Failed'
+      return
+    }
+    msg.style.color = 'var(--green)'
+    msg.textContent = 'Added'
+    document.getElementById('repoName').value = ''
+    document.getElementById('repoPath').value = ''
+    document.getElementById('repoCpg').value = ''
+    document.getElementById('repoPackages').value = ''
+    setTimeout(() => { toggleAddRepo(); loadSystem() }, 600)
+  } catch (e) {
+    msg.style.color = 'var(--red)'
+    msg.textContent = e.message
+  }
+}
+
+async function deleteRepo(name) {
+  if (!confirm('Remove "' + name + '" from config?')) return
+  try {
+    const res = await fetch('/api/repos/' + encodeURIComponent(name), { method: 'DELETE' })
+    const data = await res.json()
+    if (!res.ok) { alert(data.error || 'Failed'); return }
+    loadSystem()
+  } catch (e) { alert(e.message) }
+}
+
+// AI config
+fetch('/api/pipeline/ai-config').then(r=>r.json()).then(d=>{
+  document.getElementById('sysAiProvider').value=d.provider||'claude-cli'
+  document.getElementById('sysAiModel').value=d.model||''
+  if(d.apiKey) document.getElementById('sysAiApiKey').value='********'
+  document.getElementById('sysApiKeyGroup').style.display=d.provider==='anthropic-api'?'':'none'
+}).catch(()=>{})
+
+async function saveSysAI(){
+  const body={provider:document.getElementById('sysAiProvider').value}
+  const m=document.getElementById('sysAiModel').value.trim()
+  const k=document.getElementById('sysAiApiKey').value.trim()
+  if(m) body.model=m
+  if(k&&k!=='********') body.apiKey=k
+  try{
+    await fetch('/api/pipeline/ai-config',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    const msg=document.getElementById('sysAiMsg')
+    msg.textContent='Saved'
+    setTimeout(()=>{msg.textContent=''},2000)
+  }catch{}
+}
+
+loadSystem()
+</script>
+</body>
+</html>

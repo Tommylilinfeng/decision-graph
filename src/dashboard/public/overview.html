@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CKG — Overview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<style>
+.page-hero { display:flex; align-items:flex-end; justify-content:space-between; }
+.hero-right { display:flex; align-items:center; gap:12px; }
+.status-pill { display:flex; align-items:center; gap:7px; padding:7px 14px; border-radius:100px; font-size:12px; font-weight:600; background:var(--surface-1); border:1px solid var(--border-subtle); }
+.status-dot { width:8px; height:8px; border-radius:50%; }
+.status-dot.ok { background:var(--green); box-shadow:0 0 6px rgba(52,210,123,0.5); }
+.status-dot.err { background:var(--red); box-shadow:0 0 6px rgba(240,86,86,0.5); }
+.refresh-btn { padding:7px 14px; border-radius:100px; font-size:12px; font-weight:600; background:var(--surface-2); border:1px solid var(--border); color:var(--text-dim); cursor:pointer; transition:all var(--transition-fast); display:flex; align-items:center; gap:6px; }
+.refresh-btn:hover { color:var(--text); border-color:var(--accent); }
+.refresh-btn.spinning svg { animation:spin 0.8s linear infinite; }
+.stat-row { display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-bottom:24px; }
+.stat-card { background:var(--surface-1); border:1px solid var(--border-subtle); border-radius:var(--radius); padding:20px; transition:all var(--transition-smooth); opacity:0; animation:fadeUp 0.4s ease-out forwards; transform:translateY(10px); }
+.stat-card:hover { border-color:var(--border); box-shadow:var(--shadow-card); transform:translateY(-2px); }
+.stat-number { font-family:var(--mono); font-size:30px; font-weight:700; line-height:1; margin-bottom:6px; }
+.stat-label { font-size:12px; color:var(--text-dim); font-weight:500; }
+.stat-card:nth-child(1){animation-delay:0ms}.stat-card:nth-child(2){animation-delay:50ms}.stat-card:nth-child(3){animation-delay:100ms}.stat-card:nth-child(4){animation-delay:150ms}.stat-card:nth-child(5){animation-delay:200ms}.stat-card:nth-child(6){animation-delay:250ms}
+.donut-wrap { display:flex; align-items:center; gap:24px; }
+.donut-legend { flex:1; }
+.legend-item { display:flex; align-items:center; gap:8px; padding:5px 0; font-size:13px; }
+.legend-dot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+.legend-label { flex:1; color:var(--text-secondary); }
+.legend-val { font-family:var(--mono); font-weight:700; font-size:13px; }
+.hbar-row { display:flex; align-items:center; gap:12px; padding:6px 0; }
+.hbar-label { width:120px; font-size:12px; font-family:var(--mono); color:var(--text-secondary); text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.hbar-track { flex:1; height:22px; background:var(--surface-2); border-radius:4px; overflow:hidden; }
+.hbar-fill { height:100%; border-radius:4px; transition:width 0.8s cubic-bezier(0.4,0,0.2,1); display:flex; align-items:center; justify-content:flex-end; padding-right:8px; font-family:var(--mono); font-size:11px; font-weight:700; color:rgba(255,255,255,0.9); min-width:32px; }
+.repo-card { padding:20px; }
+.repo-card + .repo-card { border-top:1px solid var(--border-subtle); }
+.repo-name { font-size:15px; font-weight:700; margin-bottom:12px; display:flex; align-items:center; gap:10px; }
+.repo-name .repo-dot { width:10px; height:10px; border-radius:50%; }
+.repo-stats { display:flex; gap:20px; margin-bottom:14px; flex-wrap:wrap; }
+.repo-stat { font-size:12px; color:var(--text-dim); display:flex; align-items:center; gap:5px; }
+.repo-stat strong { font-family:var(--mono); font-weight:700; color:var(--text-secondary); font-size:13px; }
+.cov-bar-wrap { display:flex; align-items:center; gap:10px; }
+.cov-label { font-size:11px; color:var(--text-dim); width:60px; text-align:right; }
+.cov-track { flex:1; height:8px; background:var(--surface-3); border-radius:4px; overflow:hidden; }
+.cov-fill { height:100%; border-radius:4px; transition:width 1s cubic-bezier(0.4,0,0.2,1); }
+.cov-pct { font-family:var(--mono); font-size:12px; font-weight:700; width:44px; }
+.entity-mini { display:flex; gap:4px; height:6px; border-radius:3px; overflow:hidden; margin-top:10px; }
+.entity-seg { height:100%; transition:width 0.8s cubic-bezier(0.4,0,0.2,1); }
+.kw-cloud { display:flex; flex-wrap:wrap; gap:8px; }
+.kw-tag { padding:6px 14px; border-radius:100px; font-size:12px; font-weight:500; background:var(--surface-2); border:1px solid var(--border-subtle); color:var(--text-dim); transition:all var(--transition-fast); cursor:default; display:flex; align-items:center; gap:6px; }
+.kw-tag:hover { color:var(--text-secondary); border-color:var(--border); }
+.kw-count { font-family:var(--mono); font-size:10px; font-weight:700; opacity:0.5; }
+.kw-tag.hot { color:var(--accent); border-color:rgba(77,142,255,0.2); background:var(--accent-surface); }
+.recent-item { display:flex; align-items:flex-start; gap:12px; padding:12px 0; border-bottom:1px solid var(--border-subtle); }
+.recent-item:last-child { border-bottom:none; }
+.recent-icon { width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; margin-top:1px; }
+.recent-icon.decision { background:var(--accent-surface); }
+.recent-icon.bug { background:var(--red-surface); }
+.recent-icon.suboptimal { background:var(--yellow-surface); }
+.recent-text { flex:1; min-width:0; }
+.recent-summary { font-size:13px; font-weight:500; line-height:1.5; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.recent-meta { font-size:11px; color:var(--text-dim); margin-top:3px; }
+.graph-svg { width:100%; }
+.live-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green); animation:pulse 2s ease-in-out infinite; margin-right:4px; }
+.health-row { display:grid; grid-template-columns:repeat(5,1fr); gap:12px; margin-bottom:24px; }
+.health-card { background:var(--surface-1); border:1px solid var(--border-subtle); border-radius:var(--radius); padding:16px 20px; display:flex; align-items:center; gap:14px; transition:all var(--transition-smooth); }
+.health-card:hover { border-color:var(--border); box-shadow:var(--shadow-card); }
+.health-icon { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+.health-info { flex:1; min-width:0; }
+.health-value { font-family:var(--mono); font-size:20px; font-weight:700; line-height:1; margin-bottom:3px; }
+.health-label { font-size:11px; color:var(--text-dim); font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.health-card.ok .health-icon { background:var(--green-surface); }
+.health-card.warn .health-icon { background:var(--yellow-surface); }
+.health-card.bad .health-icon { background:var(--red-surface); }
+</style>
+</head>
+<body>
+<nav class="sidebar" id="sidebar"></nav>
+<script src="/sidebar.js"></script>
+<div class="main">
+  <div class="page-hero">
+    <div><h2>Overview</h2><p class="subtitle">Real-time graph statistics from Memgraph</p></div>
+    <div class="hero-right">
+      <div class="status-pill" id="statusPill"><div class="status-dot" id="statusDot"></div><span id="statusLabel">connecting...</span></div>
+      <button class="refresh-btn" id="refreshBtn" onclick="loadAll()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+        Refresh
+      </button>
+    </div>
+  </div>
+  <div class="content" id="content"><div class="loading"><div class="loading-spinner"></div>Loading graph data...</div></div>
+</div>
+<script>
+const COLORS = ['#4d8eff','#34d27b','#a78bfa','#e8b931','#22d3ee','#f97316','#ec4899','#f05656']
+function esc(s) { return !s ? '' : String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+function pct(n,t) { return t === 0 ? 0 : Math.round((n/t)*100) }
+function fmtN(n) { return n >= 1000 ? (n/1000).toFixed(1)+'k' : String(n) }
+
+function donutSVG(data, size, thickness) {
+  size=size||140; thickness=thickness||22
+  const r = size/2, ir = r - thickness, cx = r, cy = r
+  const total = data.reduce((s,d)=>s+d.value,0)
+  if (total === 0) return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'"><circle cx="'+cx+'" cy="'+cy+'" r="'+((r+ir)/2)+'" fill="none" stroke="#232832" stroke-width="'+thickness+'"/></svg>'
+  let angle = -90, paths = ''
+  for (let i = 0; i < data.length; i++) {
+    const sweep = (data[i].value / total) * 360
+    const startRad = angle * Math.PI / 180, endRad = (angle + sweep) * Math.PI / 180, mr = (r + ir) / 2
+    const x1 = cx + mr * Math.cos(startRad), y1 = cy + mr * Math.sin(startRad)
+    const x2 = cx + mr * Math.cos(endRad), y2 = cy + mr * Math.sin(endRad)
+    const large = sweep > 180 ? 1 : 0
+    paths += '<path d="M '+x1+' '+y1+' A '+mr+' '+mr+' 0 '+large+' 1 '+x2+' '+y2+'" fill="none" stroke="'+data[i].color+'" stroke-width="'+thickness+'" stroke-linecap="round" opacity="0" style="animation:donutIn 0.6s ease-out '+(i*80)+'ms forwards"/>'
+    angle += sweep
+  }
+  return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'"><circle cx="'+cx+'" cy="'+cy+'" r="'+((r+ir)/2)+'" fill="none" stroke="#1c2029" stroke-width="'+thickness+'"/>'+paths+'<text x="'+cx+'" y="'+(cy-4)+'" text-anchor="middle" fill="#e2e6f0" font-family="JetBrains Mono" font-size="22" font-weight="700">'+fmtN(total)+'</text><text x="'+cx+'" y="'+(cy+14)+'" text-anchor="middle" fill="#5c6478" font-family="DM Sans" font-size="11">total</text><style>@keyframes donutIn{to{opacity:1}}</style></svg>'
+}
+
+function parseMiB(s) {
+  if (!s) return 0
+  var m = String(s).match(/([\d.]+)\s*(MiB|GiB|KiB)/i)
+  if (!m) return parseFloat(s) || 0
+  var v = parseFloat(m[1])
+  if (m[2].toLowerCase() === 'gib') return v * 1024
+  if (m[2].toLowerCase() === 'kib') return v / 1024
+  return v
+}
+
+function gaugeSVG(used, total, label, valueStr, color) {
+  var pctVal = total > 0 ? Math.min(used / total, 1) : 0
+  var r = 52, cx = 62, cy = 62, sw = 10
+  var circ = 2 * Math.PI * r, dashFull = circ * 0.75, dashUsed = dashFull * pctVal, rot = 135
+  var pctColor = pctVal > 0.8 ? '#f05656' : pctVal > 0.5 ? '#e8b931' : color
+  return '<svg width="124" height="128" viewBox="0 0 124 128">'
+    +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#232832" stroke-width="'+sw+'" stroke-dasharray="'+dashFull+' '+circ+'" stroke-linecap="round" transform="rotate('+rot+' '+cx+' '+cy+')"/>'
+    +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+pctColor+'" stroke-width="'+sw+'" stroke-dasharray="'+dashUsed+' '+circ+'" stroke-linecap="round" transform="rotate('+rot+' '+cx+' '+cy+')" style="transition:stroke-dasharray 1s ease"/>'
+    +'<text x="'+cx+'" y="'+(cy-6)+'" text-anchor="middle" fill="#e2e6f0" font-family="JetBrains Mono" font-size="13" font-weight="700">'+esc(valueStr)+'</text>'
+    +'<text x="'+cx+'" y="'+(cy+10)+'" text-anchor="middle" fill="#5c6478" font-family="DM Sans" font-size="10">'+label+'</text>'
+    +'<text x="'+cx+'" y="'+(cy+24)+'" text-anchor="middle" fill="'+pctColor+'" font-family="JetBrains Mono" font-size="11" font-weight="700">'+Math.round(pctVal*100)+'%</text>'
+    +'</svg>'
+}
+
+function renderMgLive(mg) {
+  var storageData = Array.isArray(mg.storage) ? mg.storage : []
+  function mgVal(key) { var row = storageData.find(function(r){return r['storage info']===key}); return row ? row.value : null }
+  var memRes = parseMiB(mgVal('memory_res')), memLimit = parseMiB(mgVal('allocation_limit'))
+  var memTracked = parseMiB(mgVal('memory_tracked')), peakMem = parseMiB(mgVal('peak_memory_res'))
+  if (storageData.length === 0) return '<div style="color:var(--text-dim);font-size:12px;padding:30px;text-align:center">No storage info</div>'
+  return '<div style="display:flex;align-items:center;justify-content:space-around;padding:8px 0 16px">'
+    + gaugeSVG(memRes, memLimit, 'Resident', mgVal('memory_res')||'—', '#4d8eff')
+    + gaugeSVG(memTracked, memLimit, 'Tracked', mgVal('memory_tracked')||'—', '#22d3ee')
+    + gaugeSVG(peakMem, memLimit, 'Peak', mgVal('peak_memory_res')||'—', '#a78bfa')
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:14px 0 6px;border-top:1px solid var(--border-subtle)">'
+    + '<div style="text-align:center"><div style="font-family:var(--mono);font-size:18px;font-weight:700;color:#4d8eff">'+esc(mgVal('disk_usage')||'—')+'</div><div style="font-size:10px;color:var(--text-dim);margin-top:3px">Disk</div></div>'
+    + '<div style="text-align:center"><div style="font-family:var(--mono);font-size:18px;font-weight:700">'+esc(mgVal('allocation_limit')||'—')+'</div><div style="font-size:10px;color:var(--text-dim);margin-top:3px">Mem Limit</div></div>'
+    + '<div style="text-align:center"><div style="font-family:var(--mono);font-size:18px;font-weight:700">'+fmtN(Number(mgVal('vertex_count'))||0)+'</div><div style="font-size:10px;color:var(--text-dim);margin-top:3px">Vertices</div></div>'
+    + '<div style="text-align:center"><div style="font-family:var(--mono);font-size:18px;font-weight:700">'+fmtN(Number(mgVal('edge_count'))||0)+'</div><div style="font-size:10px;color:var(--text-dim);margin-top:3px">Edges</div></div>'
+    + '</div>'
+    + '<div style="text-align:center;padding-top:8px;font-size:11px;color:var(--text-dim)">'
+    + '<span style="padding:3px 10px;border-radius:100px;background:rgba(52,210,123,0.08);color:#34d27b;font-family:var(--mono);font-weight:700;font-size:10px">'+esc((mgVal('storage_mode')||'').replace('IN_MEMORY_',''))+'</span>'
+    + ' &nbsp;isolation: '+esc(mgVal('global_isolation_level')||'—')
+    + '</div>'
+}
+
+var mgPollTimer = null
+function startMgPoll() {
+  if (mgPollTimer) clearInterval(mgPollTimer)
+  mgPollTimer = setInterval(function(){
+    fetch('/api/memgraph').then(function(r){return r.json()}).then(function(mg){
+      var panel = document.getElementById('mgLivePanel')
+      if (panel) panel.innerHTML = renderMgLive(mg)
+    }).catch(function(){})
+  }, 5000)
+}
+
+function render(d) {
+  var t = d.totals, el = document.getElementById('content')
+  var statCards = [
+    {val:t.nodes,label:'Total Nodes',color:'var(--text)'},{val:t.edges,label:'Total Edges',color:'var(--text)'},
+    {val:t.codeEntities,label:'Code Entities',color:'var(--accent)'},{val:t.decisions,label:'Decisions',color:'var(--green)'},
+    {val:t.anchored,label:'Anchored',color:'var(--purple)'},{val:t.unanchored,label:'Unanchored',color:'var(--yellow)'},
+  ].map(function(s){return '<div class="stat-card"><div class="stat-number" style="color:'+s.color+'">'+fmtN(s.val)+'</div><div class="stat-label">'+s.label+'</div></div>'}).join('')
+
+  var etData = d.entityTypes.map(function(e,i){return {label:e.type,value:e.count,color:COLORS[i%COLORS.length]}})
+  var etDonut = donutSVG(etData, 160, 24)
+  var etLegend = etData.map(function(e){return '<div class="legend-item"><div class="legend-dot" style="background:'+e.color+'"></div><span class="legend-label">'+esc(e.label)+'</span><span class="legend-val">'+fmtN(e.value)+'</span></div>'}).join('')
+
+  var maxEdge = Math.max.apply(null,d.edgeTypes.map(function(e){return e.count}).concat([1]))
+  var edgeBars = d.edgeTypes.map(function(e,i){var w=Math.max((e.count/maxEdge)*100,2);return '<div class="hbar-row"><div class="hbar-label">'+esc(e.type)+'</div><div class="hbar-track"><div class="hbar-fill" style="width:'+w+'%;background:'+COLORS[i%COLORS.length]+'">'+fmtN(e.count)+'</div></div></div>'}).join('')
+
+  var repoColors=['#4d8eff','#34d27b','#a78bfa','#e8b931','#22d3ee']
+  var repoCards = d.repos.map(function(r,ri){
+    var col=repoColors[ri%repoColors.length], covPct=r.totalFiles>0?pct(r.coveredFiles,r.totalFiles):0
+    var covColor=covPct>70?'var(--green)':covPct>30?'var(--yellow)':'var(--red)'
+    var etypes=Object.entries(r.entities),etotal=etypes.reduce(function(s,e){return s+Number(e[1])},0)
+    var miniSegs=etypes.map(function(e,i){var w=etotal>0?(Number(e[1])/etotal)*100:0;return '<div class="entity-seg" style="width:'+w+'%;background:'+COLORS[i%COLORS.length]+'" title="'+e[0]+': '+e[1]+'"></div>'}).join('')
+    var entityBadges=etypes.map(function(e,i){return '<span class="repo-stat"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:'+COLORS[i%COLORS.length]+'"></span> <strong>'+e[1]+'</strong> '+e[0]+'</span>'}).join('')
+    return '<div class="repo-card"><div class="repo-name"><div class="repo-dot" style="background:'+col+'"></div>'+esc(r.name)+'</div><div class="repo-stats">'+entityBadges+'<span class="repo-stat">│</span><span class="repo-stat"><strong>'+fmtN(r.decisions)+'</strong> decisions</span><span class="repo-stat"><strong>'+fmtN(r.calls)+'</strong> CALLS</span></div><div class="cov-bar-wrap"><span class="cov-label">Coverage</span><div class="cov-track"><div class="cov-fill" style="width:'+covPct+'%;background:'+covColor+'"></div></div><span class="cov-pct" style="color:'+covColor+'">'+covPct+'%</span></div><div class="entity-mini">'+miniSegs+'</div></div>'
+  }).join('')
+
+  var srcLabel=function(s){return {cold_start:'Cold Start',cold_start_v2:'Cold Start v2',claude_code_session:'Session',manual_business_context:'Business'}[s]||s}
+  var srcData=d.decisionSources.map(function(s,i){return {label:srcLabel(s.source),value:s.count,color:COLORS[i%COLORS.length]}})
+  var srcDonut=donutSVG(srcData,140,20)
+  var srcLegend=srcData.map(function(s){return '<div class="legend-item"><div class="legend-dot" style="background:'+s.color+'"></div><span class="legend-label">'+esc(s.label)+'</span><span class="legend-val">'+s.value+'</span></div>'}).join('')
+
+  var typeColors={decision:'var(--accent)',bug:'var(--red)',suboptimal:'var(--yellow)'},typeIcons={decision:'',bug:'',suboptimal:''}
+  var maxType=Math.max.apply(null,d.decisionTypes.map(function(t){return t.count}).concat([1]))
+  var typeBars=d.decisionTypes.map(function(t){var w=Math.max((t.count/maxType)*100,4);return '<div class="hbar-row"><div class="hbar-label">'+(typeIcons[t.type]||'')+' '+t.type+'</div><div class="hbar-track"><div class="hbar-fill" style="width:'+w+'%;background:'+(typeColors[t.type]||'var(--text-dim)')+'">'+t.count+'</div></div></div>'}).join('')
+
+  var maxKw=d.topKeywords.length>0?d.topKeywords[0].count:1
+  var kwTags=d.topKeywords.map(function(k){var hot=k.count>=maxKw*0.5;return '<span class="kw-tag'+(hot?' hot':'')+'">'+esc(k.keyword)+'<span class="kw-count">'+k.count+'</span></span>'}).join('')
+
+  var recentItems=d.recentDecisions.map(function(r){var icon=r.ftype==='bug'?'':r.ftype==='suboptimal'?'':'';var cls=r.ftype==='bug'?'bug':r.ftype==='suboptimal'?'suboptimal':'decision';var date=r.created_at?new Date(r.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'';return '<div class="recent-item"><div class="recent-icon '+cls+'">'+icon+'</div><div class="recent-text"><div class="recent-summary">'+esc(r.summary)+'</div><div class="recent-meta">'+srcLabel(r.source)+' · '+date+'</div></div></div>'}).join('')
+
+  var graphSvg=''
+  if(d.graph.nodes.length>0){var W=480,H=260,gcx=W/2,gcy=H/2,grad=90;var nodes=d.graph.nodes.map(function(n,i){var a=(2*Math.PI*i)/d.graph.nodes.length-Math.PI/2;return Object.assign({},n,{x:gcx+grad*Math.cos(a),y:gcy+grad*Math.sin(a),color:repoColors[i%repoColors.length]})});var nm={};nodes.forEach(function(n){nm[n.id]=n});var gedges='';d.graph.edges.forEach(function(e){var f=nm[e.source],tt=nm[e.target];if(!f||!tt)return;var dx=tt.x-f.x,dy=tt.y-f.y,dist=Math.sqrt(dx*dx+dy*dy);if(dist<1)return;var rr=32,sx=f.x+(dx/dist)*rr,sy=f.y+(dy/dist)*rr,ex=tt.x-(dx/dist)*rr,ey=tt.y-(dy/dist)*rr;gedges+='<line x1="'+sx+'" y1="'+sy+'" x2="'+ex+'" y2="'+ey+'" stroke="#3a4050" stroke-width="2" marker-end="url(#garr)"/>';gedges+='<text x="'+((sx+ex)/2)+'" y="'+((sy+ey)/2-6)+'" text-anchor="middle" fill="#5c6478" font-size="10" font-family="JetBrains Mono">'+e.weight+'</text>'});var gcircles='';nodes.forEach(function(n){var rr=28+Math.min(n.decisions,30)*0.5;gcircles+='<circle cx="'+n.x+'" cy="'+n.y+'" r="'+rr+'" fill="'+n.color+'" fill-opacity="0.1" stroke="'+n.color+'" stroke-width="2"/>';gcircles+='<text x="'+n.x+'" y="'+(n.y-2)+'" text-anchor="middle" fill="'+n.color+'" font-size="11" font-weight="600" font-family="DM Sans">'+n.id+'</text>';gcircles+='<text x="'+n.x+'" y="'+(n.y+12)+'" text-anchor="middle" fill="#5c6478" font-size="10" font-family="JetBrains Mono">'+n.decisions+'d</text>'});graphSvg='<svg class="graph-svg" viewBox="0 0 '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg"><defs><marker id="garr" viewBox="0 0 10 6" refX="10" refY="3" markerWidth="8" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 3 L 0 6" fill="#3a4050"/></marker></defs>'+gedges+gcircles+'</svg>'}else{graphSvg='<div style="text-align:center;padding:40px;color:var(--text-dim)">No cross-repo edges</div>'}
+
+  // Memgraph live gauges
+  var mg = d.memgraph || {}
+  var gaugesHtml = renderMgLive(mg)
+
+  // Indexes
+  var indexData = Array.isArray(mg.indexes) ? mg.indexes : []
+  var indexHtml = indexData.length > 0 ? indexData.map(function(idx){
+    var itype=idx['index type']||'',label=idx.label||'',prop=Array.isArray(idx.property)?idx.property.join(', '):(idx.property||''),cnt=idx.count!=null?idx.count:'',isText=String(itype).indexOf('text')>=0
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:12px"><span style="padding:2px 7px;border-radius:4px;background:'+(isText?'rgba(167,139,250,0.08)':'rgba(77,142,255,0.08)')+';color:'+(isText?'#a78bfa':'#4d8eff')+';font-family:var(--mono);font-size:10px;font-weight:700">'+(isText?'TEXT':'L+P')+'</span><span style="color:#4d8eff;font-weight:600;font-family:var(--mono)">'+esc(label)+'</span><span style="color:var(--text-dim);font-family:var(--mono);font-size:11px">('+esc(prop)+')</span><span style="margin-left:auto;font-family:var(--mono);color:var(--text-dim);font-size:11px">'+cnt+'</span></div>'
+  }).join('') : '<div style="color:var(--text-dim);font-size:12px;padding:8px 0">No indexes</div>'
+
+  // Constraints
+  var constraintData = Array.isArray(mg.constraints) ? mg.constraints : []
+  var constraintHtml = constraintData.length > 0 ? constraintData.map(function(c){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:12px"><span style="padding:2px 7px;border-radius:4px;background:rgba(52,210,123,0.08);color:#34d27b;font-family:var(--mono);font-size:10px;font-weight:700">'+esc(c['constraint type']||'unique')+'</span><span style="color:#34d27b;font-weight:600;font-family:var(--mono)">'+esc(c.label||'')+'</span><span style="color:var(--text-dim);font-family:var(--mono);font-size:11px">('+esc(Array.isArray(c.properties)?c.properties.join(', '):(c.properties||''))+')</span></div>'
+  }).join('') : '<div style="color:var(--text-dim);font-size:12px;padding:8px 0">No constraints</div>'
+
+  // Health indicators
+  var h = d.health || {}
+  var totalDec = t.decisions || 1
+  var anchoredPct = t.decisions > 0 ? Math.round((t.anchored / t.decisions) * 100) : 0
+  var stalePct = t.decisions > 0 ? Math.round((h.staleDecisions / t.decisions) * 100) : 0
+  var embedPct = t.decisions > 0 ? Math.round((h.embeddedDecisions / t.decisions) * 100) : 0
+  var lastRun = h.lastPipelineRun || h.lastScheduledRun
+  var lastRunStr = lastRun ? new Date(lastRun.at || lastRun.startedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : 'Never'
+  var lastRunStatus = lastRun ? (lastRun.status || 'done') : 'none'
+
+  var healthCards = ''
+    + '<div class="health-card '+(stalePct > 20 ? 'bad' : stalePct > 5 ? 'warn' : 'ok')+'"><div class="health-icon">'+(stalePct > 20 ? '' : stalePct > 5 ? '' : '')+'</div><div class="health-info"><div class="health-value" style="color:'+(stalePct > 20 ? 'var(--red)' : stalePct > 5 ? 'var(--yellow)' : 'var(--green)')+'">'+(h.staleDecisions||0)+'</div><div class="health-label">Stale Decisions ('+stalePct+'%)</div></div></div>'
+    + '<div class="health-card '+(anchoredPct > 70 ? 'ok' : anchoredPct > 40 ? 'warn' : 'bad')+'"><div class="health-icon">'+(anchoredPct > 70 ? '' : '')+'</div><div class="health-info"><div class="health-value" style="color:'+(anchoredPct > 70 ? 'var(--green)' : anchoredPct > 40 ? 'var(--yellow)' : 'var(--red)')+'">'+anchoredPct+'%</div><div class="health-label">Anchored ('+t.anchored+'/'+t.decisions+')</div></div></div>'
+    + '<div class="health-card '+(embedPct > 80 ? 'ok' : embedPct > 30 ? 'warn' : 'bad')+'"><div class="health-icon"></div><div class="health-info"><div class="health-value" style="color:'+(embedPct > 80 ? 'var(--green)' : embedPct > 30 ? 'var(--yellow)' : 'var(--text-dim)')+'">'+embedPct+'%</div><div class="health-label">Embedded ('+(h.embeddedDecisions||0)+'/'+t.decisions+')</div></div></div>'
+    + '<div class="health-card '+(h.gapFunctions > 10 ? 'warn' : 'ok')+'"><div class="health-icon"></div><div class="health-info"><div class="health-value" style="color:'+(h.gapFunctions > 10 ? 'var(--yellow)' : 'var(--text-dim)')+'">'+(h.gapFunctions||0)+'</div><div class="health-label">Gap Functions (no decisions)</div></div></div>'
+    + '<div class="health-card '+(lastRunStatus === 'done' ? 'ok' : lastRunStatus === 'error' ? 'bad' : 'warn')+'"><div class="health-icon">'+(lastRunStatus === 'done' ? '' : lastRunStatus === 'error' ? '' : '')+'</div><div class="health-info"><div class="health-value" style="font-size:14px;color:var(--text-secondary)">'+lastRunStr+'</div><div class="health-label">Last Pipeline Run</div></div></div>'
+
+  el.innerHTML = '<div class="stat-row">'+statCards+'</div>'
+    + '<div class="health-row">'+healthCards+'</div>'
+    +'<div class="grid-3">'
+    +'<div class="card"><div class="card-head"><h3>Memgraph Live</h3><span class="card-badge"><span class="live-dot"></span>polling 5s</span></div><div class="card-body" id="mgLivePanel">'+gaugesHtml+'</div></div>'
+    +'<div class="card"><div class="card-head"><h3>Entity Types</h3><span class="card-badge">'+d.entityTypes.length+' types</span></div><div class="card-body"><div class="donut-wrap">'+etDonut+'<div class="donut-legend">'+etLegend+'</div></div></div></div>'
+    +'<div class="card"><div class="card-head"><h3>Edge Types</h3><span class="card-badge">'+fmtN(t.edges)+' total</span></div><div class="card-body">'+edgeBars+'</div></div>'
+    +'</div>'
+    +'<div class="card" style="margin-bottom:24px"><div class="card-head"><h3>Repositories</h3><span class="card-badge">'+d.repos.length+' repos</span></div>'+repoCards+'</div>'
+    +'<div class="grid-2">'
+    +'<div class="card"><div class="card-head"><h3>Decision Sources</h3></div><div class="card-body"><div class="donut-wrap">'+srcDonut+'<div class="donut-legend">'+srcLegend+'</div></div></div></div>'
+    +'<div class="card"><div class="card-head"><h3>Finding Types</h3></div><div class="card-body">'+typeBars+'</div></div>'
+    +'</div>'
+    +'<div class="grid-2">'
+    +'<div class="card"><div class="card-head"><h3>Top Keywords</h3><span class="card-badge">'+d.topKeywords.length+'</span></div><div class="card-body"><div class="kw-cloud">'+(kwTags||'<span style="color:var(--text-dim)">No keywords</span>')+'</div></div></div>'
+    +'<div class="card"><div class="card-head"><h3>Service Graph</h3></div><div class="card-body">'+graphSvg+'</div></div>'
+    +'</div>'
+    +'<div class="grid-2">'
+    +'<div class="card"><div class="card-head"><h3>Recent Decisions</h3></div><div class="card-body" style="padding:12px 20px">'+(recentItems||'<div style="color:var(--text-dim);padding:20px 0;text-align:center">No decisions yet</div>')+'</div></div>'
+    +'<div class="card"><div class="card-head"><h3>Indexes</h3><span class="card-badge">'+indexData.length+'</span></div><div class="card-body" style="max-height:280px;overflow-y:auto">'+indexHtml+'</div></div>'
+    +'</div>'
+    +'<div class="card" style="margin-bottom:24px"><div class="card-head"><h3>Constraints</h3><span class="card-badge">'+constraintData.length+'</span></div><div class="card-body">'+constraintHtml+'</div></div>'
+
+  startMgPoll()
+}
+
+async function loadAll() {
+  var btn = document.getElementById('refreshBtn')
+  btn.classList.add('spinning')
+  try {
+    var controller = new AbortController()
+    var timeout = setTimeout(function(){controller.abort()}, 15000)
+    var results = await Promise.all([
+      fetch('/api/overview', {signal:controller.signal}),
+      fetch('/api/memgraph', {signal:controller.signal}).catch(function(){return null})
+    ])
+    clearTimeout(timeout)
+    var text = await results[0].text()
+    var data
+    try { data = JSON.parse(text) } catch(e) { throw new Error('Invalid JSON: '+text.slice(0,200)) }
+    if (data.error) throw new Error(data.error)
+    if (results[1]) { try { data.memgraph = await results[1].json() } catch(e){} }
+    document.getElementById('statusDot').className = 'status-dot ok'
+    document.getElementById('statusLabel').textContent = 'Memgraph connected'
+    render(data)
+  } catch(e) {
+    document.getElementById('statusDot').className = 'status-dot err'
+    var errMsg = e.name === 'AbortError' ? 'Timeout (15s)' : (e.message || 'Error')
+    document.getElementById('statusLabel').textContent = errMsg
+    var isConnErr = errMsg.toLowerCase().includes('connect') || errMsg.toLowerCase().includes('econnrefused') || errMsg.toLowerCase().includes('fetch') || e.name === 'TypeError'
+    document.getElementById('content').innerHTML = '<div class="loading">'
+      + '<div style="color:var(--red);font-size:16px;font-weight:600;margin-bottom:12px">'+(isConnErr ? 'Memgraph is not running' : esc(errMsg))+'</div>'
+      + (isConnErr ? '<div style="color:var(--text-dim);font-size:14px;line-height:2">'
+        + 'Start Memgraph first:<br>'
+        + '<code style="font-family:var(--mono);font-size:13px;background:var(--surface-2);padding:6px 14px;border-radius:4px;color:var(--text)">docker compose up -d</code><br><br>'
+        + 'Or try <a href="/scan" style="color:var(--accent)">Quick Scan</a> — it works without Memgraph.'
+        + '</div>' : '')
+      + '</div>'
+  } finally {
+    btn.classList.remove('spinning')
+  }
+}
+loadAll()
+setInterval(function() { loadAll() }, 30000)
+</script>
+</body>
+</html>

@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CKG — Getting Started</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<style>
+.content { max-width:900px; }
+
+/* ── Steps ──────────────────────────── */
+.steps { display:flex; flex-direction:column; gap:0; }
+
+.step {
+  position: relative;
+  padding: 0 0 0 52px;
+  min-height: 80px;
+}
+.step::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  top: 36px;
+  bottom: 0;
+  width: 1px;
+  background: var(--border);
+}
+.step:last-child::before { display:none; }
+
+.step-number {
+  position: absolute;
+  left: 0; top: 0;
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-dim);
+  z-index: 1;
+  transition: all var(--transition-smooth);
+}
+.step.done .step-number {
+  background: var(--green-surface);
+  border-color: var(--green);
+  color: var(--green);
+}
+.step.active .step-number {
+  background: var(--accent-surface);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.step-content { padding: 6px 0 32px; }
+.step-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+.step-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin-bottom: 12px;
+}
+.step-desc a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.step-desc a:hover { text-decoration: underline; }
+
+/* Code blocks */
+.code-block {
+  background: var(--surface-0);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  overflow-x: auto;
+  white-space: pre;
+  margin-bottom: 12px;
+  position: relative;
+}
+.code-block .code-lang {
+  position: absolute;
+  top: 8px; right: 12px;
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.code-block .comment { color: var(--text-dim); }
+.code-block .string { color: var(--green); }
+.code-block .key { color: var(--accent); }
+
+/* Info boxes */
+.info-box {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+.info-box.tip {
+  background: var(--accent-surface);
+  border: 1px solid rgba(77,142,255,0.15);
+  color: var(--text-secondary);
+}
+.info-box.warn {
+  background: rgba(232,185,49,0.06);
+  border: 1px solid rgba(232,185,49,0.12);
+  color: var(--text-secondary);
+}
+.info-box-label {
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+.info-box.tip .info-box-label { color: var(--accent); }
+.info-box.warn .info-box-label { color: var(--yellow); }
+
+/* Action buttons */
+.step-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.step-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: var(--radius-sm);
+  font-family: var(--sans); font-size: 13px; font-weight: 600;
+  text-decoration: none; cursor: pointer; border: none;
+  transition: all var(--transition-fast);
+}
+.step-btn-primary { background: var(--accent); color: white; }
+.step-btn-primary:hover { background: #5c9aff; }
+.step-btn-ghost { background: var(--surface-2); color: var(--text-dim); border: 1px solid var(--border); }
+.step-btn-ghost:hover { color: var(--text); border-color: var(--accent); }
+
+/* Status checks */
+.status-checks { display:flex; flex-direction:column; gap:8px; margin: 12px 0; }
+.status-check {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-dot.ok { background: var(--green); box-shadow: 0 0 6px rgba(52,210,123,0.4); }
+.status-dot.err { background: var(--red); box-shadow: 0 0 6px rgba(240,86,86,0.4); }
+.status-dot.pending { background: var(--yellow); box-shadow: 0 0 6px rgba(232,185,49,0.4); }
+.status-dot.unknown { background: var(--surface-3); }
+.status-label { flex: 1; color: var(--text-secondary); }
+.status-value { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+.status-value.ok { color: var(--green); }
+.status-value.err { color: var(--red); }
+.status-value.pending { color: var(--yellow); }
+
+/* Diagram */
+.flow-diagram {
+  background: var(--surface-0);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin: 16px 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--text-dim);
+  white-space: pre;
+  overflow-x: auto;
+}
+.flow-diagram .highlight { color: var(--accent); font-weight: 600; }
+.flow-diagram .green { color: var(--green); }
+.flow-diagram .purple { color: var(--purple); }
+
+/* Checklist progress */
+.progress-bar-wrap { margin: 20px 0 32px; }
+.progress-label {
+  display: flex; justify-content: space-between;
+  font-size: 12px; color: var(--text-dim); margin-bottom: 8px;
+}
+.progress-bar {
+  height: 4px; border-radius: 2px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%; border-radius: 2px;
+  background: var(--accent);
+  transition: width 0.6s ease;
+}
+
+/* Loading */
+.loading-spinner { width:20px; height:20px; border:2px solid var(--surface-3); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; }
+</style>
+</head>
+<body>
+
+<nav class="sidebar" id="sidebar"></nav>
+<script src="/sidebar.js"></script>
+
+<div class="main">
+  <div class="page-hero">
+    <h2>Getting Started</h2>
+    <p class="subtitle">Set up Context Chain step by step</p>
+  </div>
+
+  <div class="content">
+    <!-- Progress -->
+    <div class="progress-bar-wrap">
+      <div class="progress-label">
+        <span id="progressText">Checking status...</span>
+        <span id="progressPct">0%</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div class="info-box tip" style="margin-bottom:24px">
+      <span class="info-box-label">Quick Start</span>
+      <span>Complete steps 1-5, then go to <a href="/scan" style="color:var(--accent);font-weight:600">Quick Scan</a> — select a repo and see design decisions automatically. No goal or business context needed.</span>
+    </div>
+
+    <div class="steps">
+
+      <!-- Step 1: Prerequisites -->
+      <div class="step" id="step1">
+        <div class="step-number">1</div>
+        <div class="step-content">
+          <div class="step-title">Install Prerequisites</div>
+          <div class="step-desc">
+            You need Claude CLI to power the AI analysis. Install it and log in:
+          </div>
+          <div class="code-block"><span class="code-lang">bash</span>npm install -g @anthropic-ai/claude-code
+claude login</div>
+          <div class="step-desc">
+            Or switch to Anthropic API in the <a href="/scan">Quick Scan</a> page and enter your API key instead — no CLI needed.
+          </div>
+          <div class="status-checks" id="prereqChecks">
+            <div class="status-check">
+              <div class="status-dot unknown"></div>
+              <span class="status-label">Checking...</span>
+            </div>
+          </div>
+          <div class="info-box tip">
+            <span class="info-box-label">Tip</span>
+            <span>Run <code style="font-family:var(--mono);font-size:12px;background:var(--surface-2);padding:2px 6px;border-radius:3px">bash scripts/setup.sh</code> to check all prerequisites and pull Docker images.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Configure Repos -->
+      <div class="step" id="step2">
+        <div class="step-number">2</div>
+        <div class="step-content">
+          <div class="step-title">Configure Repositories</div>
+          <div class="step-desc">
+            Add your code repositories to <code style="font-family:var(--mono);font-size:12px;background:var(--surface-2);padding:2px 6px;border-radius:3px">ckg.config.json</code>. Each repo needs a name, absolute path, type, and CPG file path.
+          </div>
+          <div class="status-checks" id="repoChecks">
+            <div class="status-check">
+              <div class="status-dot unknown"></div>
+              <span class="status-label">Checking config...</span>
+            </div>
+          </div>
+          <div class="code-block"><span class="code-lang">json</span>{
+  <span class="key">"project"</span>: <span class="string">"my-project"</span>,
+  <span class="key">"ai"</span>: { <span class="key">"provider"</span>: <span class="string">"claude-cli"</span> },
+  <span class="key">"repos"</span>: [
+    {
+      <span class="key">"name"</span>: <span class="string">"my-service"</span>,
+      <span class="key">"path"</span>: <span class="string">"/absolute/path/to/repo"</span>,
+      <span class="key">"type"</span>: <span class="string">"backend"</span>,
+      <span class="key">"cpgFile"</span>: <span class="string">"data/my-service.json"</span>,
+      <span class="key">"packages"</span>: []
+    }
+  ]
+}</div>
+          <div class="step-actions">
+            <a href="/system" class="step-btn step-btn-primary">Go to System page to add repos</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Generate CPG -->
+      <div class="step" id="step3">
+        <div class="step-number">3</div>
+        <div class="step-content">
+          <div class="step-title">Generate Code Property Graphs</div>
+          <div class="step-desc">
+            Use Joern to scan each repository and produce a CPG JSON file. This extracts functions, files, and call relationships from your source code.
+          </div>
+          <div class="status-checks" id="cpgChecks">
+            <div class="status-check">
+              <div class="status-dot unknown"></div>
+              <span class="status-label">Checking CPG files...</span>
+            </div>
+          </div>
+          <div class="code-block"><span class="code-lang">bash</span><span class="comment"># From the context-chain directory, for each repo:</span>
+joern --script joern/extract-code-entities.sc \
+  --param cpgFile=my-service.cpg.bin \
+  --param outFile=data/my-service.json \
+  --param repoName=my-service</div>
+          <div class="info-box warn">
+            <span class="info-box-label">Note</span>
+            <span>Run Joern from within each repo directory first to generate the <code style="font-family:var(--mono);font-size:12px">.cpg.bin</code> file, then use the extraction script to produce the JSON.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 4: Start Memgraph -->
+      <div class="step" id="step4">
+        <div class="step-number">4</div>
+        <div class="step-content">
+          <div class="step-title">Start Memgraph</div>
+          <div class="step-desc">
+            Start the graph database using Docker Compose. Memgraph stores your code entities and design decisions as a connected graph.
+          </div>
+          <div class="status-checks" id="memgraphChecks">
+            <div class="status-check">
+              <div class="status-dot unknown"></div>
+              <span class="status-label">Checking Memgraph...</span>
+            </div>
+          </div>
+          <div class="code-block"><span class="code-lang">bash</span>docker compose up -d
+
+<span class="comment"># Memgraph:     localhost:7687</span>
+<span class="comment"># Memgraph Lab: localhost:3000</span></div>
+        </div>
+      </div>
+
+      <!-- Step 5: Full Setup -->
+      <div class="step" id="step5">
+        <div class="step-number">5</div>
+        <div class="step-content">
+          <div class="step-title">Initialize Database</div>
+          <div class="step-desc">
+            Run Full Setup to create the schema, ingest all CPG files into Memgraph, and link cross-repo dependencies. You can also do this from the System page.
+          </div>
+          <div class="status-checks" id="dataChecks">
+            <div class="status-check">
+              <div class="status-dot unknown"></div>
+              <span class="status-label">Checking graph data...</span>
+            </div>
+          </div>
+          <div class="code-block"><span class="code-lang">bash</span><span class="comment"># All-in-one:</span>
+npm run db:schema && npm run ingest:all && npm run link:repos
+
+<span class="comment"># Or use the System page's "Full Setup" button</span></div>
+          <div class="step-actions">
+            <a href="/system" class="step-btn step-btn-primary">Go to System page</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 6: Run Analysis -->
+      <div class="step" id="step6">
+        <div class="step-number">6</div>
+        <div class="step-content">
+          <div class="step-title">Extract Design Decisions</div>
+          <div class="step-desc">
+            Use Scan to point at any code directory. The AI automatically identifies the most important files, reads your source code, and extracts design decisions, tradeoffs, and patterns. No configuration needed.
+          </div>
+          <div class="status-checks" id="decisionChecks">
+            <div class="status-check">
+              <div class="status-dot unknown"></div>
+              <span class="status-label">Checking decisions...</span>
+            </div>
+          </div>
+          <div class="step-actions">
+            <a href="/scan" class="step-btn step-btn-primary">Open Scan</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 7: Connect MCP -->
+      <div class="step" id="step7">
+        <div class="step-number">7</div>
+        <div class="step-content">
+          <div class="step-title">Connect to Claude Code via MCP</div>
+          <div class="step-desc">
+            Start the MCP server so Claude Code can query your design decisions while coding. Add the server config to your project's <code style="font-family:var(--mono);font-size:12px;background:var(--surface-2);padding:2px 6px;border-radius:3px">.mcp.json</code>.
+          </div>
+          <div class="code-block"><span class="code-lang">bash</span><span class="comment"># Start MCP server:</span>
+npm run mcp</div>
+          <div class="code-block"><span class="code-lang">json</span><span class="comment">// Add to your project's .mcp.json:</span>
+{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"context-chain"</span>: {
+      <span class="key">"command"</span>: <span class="string">"bash"</span>,
+      <span class="key">"args"</span>: [<span class="string">"/path/to/context-chain/mcp-start.sh"</span>]
+    }
+  }
+}</div>
+          <div class="info-box tip">
+            <span class="info-box-label">Tip</span>
+            <span>Once connected, Claude Code can automatically look up relevant design decisions when you ask it to modify code. It provides 9 tools including <code style="font-family:var(--mono);font-size:12px">get_context_for_code</code>, <code style="font-family:var(--mono);font-size:12px">search_decisions_by_keyword</code>, and <code style="font-family:var(--mono);font-size:12px">get_decision_relationships</code>.</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Architecture overview -->
+    <div style="margin-top:16px">
+      <h3 style="font-size:14px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:16px">Architecture Overview</h3>
+      <div class="flow-diagram"><span class="highlight">Your Repos</span>  ──[Joern]──>  <span class="highlight">CPG JSON</span>  ──[Ingest]──>  <span class="green">Memgraph</span>
+                                                        |
+                                                   [Analysis]
+                                                        |
+                                              <span class="purple">DecisionContext</span> nodes
+                                              with ANCHORED_TO edges
+                                                        |
+                                        ┌───────────────┼───────────────┐
+                                        |               |               |
+                                   <span class="highlight">Dashboard</span>       <span class="green">MCP Server</span>      <span class="purple">Cypher API</span>
+                                   :3001         Claude Code       Direct query</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+async function checkStatus() {
+  let completedSteps = 0
+  const totalSteps = 7
+
+  try {
+    const s = await fetch('/api/system/status').then(r => r.json())
+
+    // Step 1: Prerequisites (always mark done if dashboard is running)
+    markStep('step1', 'done')
+    document.getElementById('prereqChecks').innerHTML = [
+      statusRow('ok', 'Node.js', 'Running'),
+      statusRow('ok', 'Dashboard', 'Active on :3001'),
+    ].join('')
+    completedSteps++
+
+    // Step 2: Config / repos
+    if (s.config.loaded && s.config.repos.length > 0) {
+      markStep('step2', 'done')
+      document.getElementById('repoChecks').innerHTML = s.config.repos.map(r =>
+        statusRow('ok', r.name, r.type)
+      ).join('')
+      completedSteps++
+    } else {
+      markStep('step2', 'active')
+      document.getElementById('repoChecks').innerHTML =
+        statusRow('err', 'No repos configured', 'Add repos to ckg.config.json')
+    }
+
+    // Step 3: CPG files
+    if (s.config.loaded) {
+      const allCpg = s.config.repos.every(r => r.cpgExists)
+      const anyCpg = s.config.repos.some(r => r.cpgExists)
+      if (allCpg && s.config.repos.length > 0) {
+        markStep('step3', 'done')
+        completedSteps++
+      } else if (anyCpg) {
+        markStep('step3', 'active')
+      }
+      document.getElementById('cpgChecks').innerHTML = s.config.repos.map(r =>
+        statusRow(r.cpgExists ? 'ok' : 'err', r.cpgFile, r.cpgExists ? 'Ready' : 'Missing')
+      ).join('')
+    }
+
+    // Step 4: Memgraph
+    if (s.memgraph.connected) {
+      markStep('step4', 'done')
+      document.getElementById('memgraphChecks').innerHTML =
+        statusRow('ok', 'Memgraph', 'Connected on :7687')
+      completedSteps++
+    } else {
+      markStep('step4', s.config.repos?.length > 0 ? 'active' : '')
+      document.getElementById('memgraphChecks').innerHTML =
+        statusRow('err', 'Memgraph', s.memgraph.error || 'Not connected')
+    }
+
+    // Step 5: Data ingested
+    const hasData = s.totals.codeEntities > 0
+    if (hasData) {
+      markStep('step5', 'done')
+      document.getElementById('dataChecks').innerHTML =
+        statusRow('ok', 'Graph data', s.totals.codeEntities + ' entities, ' + s.totals.callEdges + ' calls')
+      completedSteps++
+    } else if (s.memgraph.connected) {
+      markStep('step5', 'active')
+      document.getElementById('dataChecks').innerHTML =
+        statusRow('pending', 'No data', 'Run Full Setup to ingest CPG files')
+    } else {
+      document.getElementById('dataChecks').innerHTML =
+        statusRow('err', 'Cannot check', 'Memgraph not connected')
+    }
+
+    // Step 6: Decisions
+    if (s.totals.decisions > 0) {
+      markStep('step6', 'done')
+      document.getElementById('decisionChecks').innerHTML =
+        statusRow('ok', 'Decisions', s.totals.decisions + ' extracted, ' + s.totals.anchoredEdges + ' anchored')
+      completedSteps++
+    } else if (hasData) {
+      markStep('step6', 'active')
+      document.getElementById('decisionChecks').innerHTML =
+        statusRow('pending', 'No decisions yet', 'Run Scan to extract decisions')
+    } else {
+      document.getElementById('decisionChecks').innerHTML =
+        statusRow('err', 'Cannot check', 'No data ingested')
+    }
+
+    // Step 7: MCP (can't easily check, mark done if decisions exist)
+    if (s.totals.decisions > 0) {
+      markStep('step7', 'done')
+      completedSteps++
+    }
+
+  } catch (e) {
+    document.getElementById('prereqChecks').innerHTML =
+      statusRow('err', 'API Error', e.message)
+  }
+
+  // Update progress bar
+  const pct = Math.round((completedSteps / totalSteps) * 100)
+  document.getElementById('progressFill').style.width = pct + '%'
+  document.getElementById('progressPct').textContent = pct + '%'
+  document.getElementById('progressText').textContent =
+    completedSteps === totalSteps
+      ? 'All set — you are ready to go'
+      : completedSteps + ' of ' + totalSteps + ' steps completed'
+}
+
+function markStep(id, state) {
+  const el = document.getElementById(id)
+  if (!el) return
+  el.className = 'step' + (state ? ' ' + state : '')
+}
+
+function statusRow(state, label, value) {
+  return '<div class="status-check">'
+    + '<div class="status-dot ' + state + '"></div>'
+    + '<span class="status-label">' + esc(label) + '</span>'
+    + '<span class="status-value ' + state + '">' + esc(value) + '</span>'
+    + '</div>'
+}
+
+function esc(s) { return !s ? '' : String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+checkStatus()
+</script>
+</body>
+</html>

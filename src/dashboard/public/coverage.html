@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CKG &#8212; Coverage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<style>
+.page-hero{display:flex;align-items:flex-end;justify-content:space-between}
+.repo-select{padding:9px 36px 9px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--sans);font-size:13px;font-weight:500;cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235c6478' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;outline:none}
+.stats-row{display:flex;gap:2px;margin-bottom:24px;flex-wrap:wrap}
+.stat-pill{display:flex;align-items:center;gap:8px;padding:9px 18px;border-radius:100px;font-size:13px;font-weight:600;background:var(--surface-1);border:1px solid var(--border-subtle)}
+.stat-pill .dot{width:8px;height:8px;border-radius:50%}.stat-pill .val{font-family:var(--mono);font-weight:700;font-size:15px}.stat-pill .lbl{color:var(--text-dim);font-size:12px}
+.overall-bar{margin-bottom:28px;background:var(--surface-1);border:1px solid var(--border-subtle);border-radius:var(--radius);padding:20px}
+.overall-label{font-size:12px;color:var(--text-dim);margin-bottom:10px;display:flex;justify-content:space-between}
+.overall-track{height:14px;background:var(--surface-3);border-radius:7px;overflow:hidden;position:relative}
+.overall-fill{height:100%;border-radius:7px;transition:width 1s cubic-bezier(0.4,0,0.2,1);position:relative}
+.overall-fill::after{content:attr(data-pct);position:absolute;right:8px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:10px;font-weight:700;color:white}
+.breadcrumb{display:flex;align-items:center;gap:6px;margin-bottom:20px;font-size:13px}
+.breadcrumb a{color:var(--accent);cursor:pointer;text-decoration:none}.breadcrumb a:hover{text-decoration:underline}
+.breadcrumb .sep{color:var(--text-dim)}.breadcrumb .current{color:var(--text);font-weight:600}
+.treemap{display:grid;gap:4px;margin-bottom:28px}
+.treemap-cell{border-radius:var(--radius-sm);padding:12px 14px;cursor:pointer;transition:all var(--transition-fast);position:relative;overflow:hidden;min-height:56px;display:flex;flex-direction:column;justify-content:space-between;border:1px solid transparent}
+.treemap-cell:hover{transform:translateY(-1px);box-shadow:var(--shadow-card);border-color:rgba(255,255,255,0.08)}
+.treemap-cell .cell-name{font-size:12px;font-weight:600;font-family:var(--mono);line-height:1.4;word-break:break-all}
+.treemap-cell .cell-meta{font-size:10px;margin-top:6px;opacity:0.7;display:flex;align-items:center;gap:6px}
+.treemap-cell .cell-count{font-family:var(--mono);font-weight:700;font-size:16px}
+.treemap-cell .cell-fn-count{font-size:10px;opacity:0.6}
+.file-detail{background:var(--surface-1);border:1px solid var(--border-subtle);border-radius:var(--radius);overflow:hidden;margin-bottom:24px}
+.file-detail-head{padding:16px 20px;border-bottom:1px solid var(--border-subtle);display:flex;align-items:center;justify-content:space-between}
+.file-detail-head h3{font-size:14px;font-weight:700;font-family:var(--mono)}
+.fn-list{padding:0}
+.fn-row{display:flex;align-items:center;gap:14px;padding:10px 20px;border-bottom:1px solid var(--border-subtle);font-size:13px;transition:background var(--transition-fast)}
+.fn-row:last-child{border-bottom:none}.fn-row:hover{background:var(--surface-2)}
+.fn-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.fn-name{font-family:var(--mono);font-weight:500;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fn-badge{font-family:var(--mono);font-size:12px;font-weight:700;padding:2px 10px;border-radius:100px}
+.fn-status{font-size:10px;color:var(--text-dim);white-space:nowrap}
+.sql-section{background:var(--surface-1);border:1px solid var(--border-subtle);border-radius:var(--radius);overflow:hidden}
+.sql-head{padding:16px 20px;border-bottom:1px solid var(--border-subtle);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-secondary)}
+.legend-bar{display:flex;align-items:center;gap:16px;font-size:11px;color:var(--text-dim);margin-bottom:16px;padding:0 2px}
+.legend-bar span{display:flex;align-items:center;gap:4px}
+.legend-bar .ld{width:8px;height:8px;border-radius:50%}
+</style>
+</head>
+<body>
+<nav class="sidebar" id="sidebar"></nav>
+<script src="/sidebar.js"></script>
+<div class="main">
+  <div class="page-hero">
+    <div><h2>Coverage</h2><p class="subtitle">Which parts of your codebase have design decisions recorded &#8212; and where are the knowledge gaps.</p></div>
+    <select class="repo-select" id="repoSelect" onchange="loadRepo()"></select>
+  </div>
+  <div class="content" id="content"><div class="loading"><div class="loading-spinner"></div>Loading repos...</div></div>
+</div>
+<script>
+function esc(s){return !s?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function fmtN(n){return n>=1000?(n/1000).toFixed(1)+'k':String(n)}
+
+var allData = null, selectedFile = null
+
+async function init(){
+  var repos = await fetch('/api/repos').then(function(r){return r.json()})
+  var sel = document.getElementById('repoSelect')
+  repos.forEach(function(r){var o=document.createElement('option');o.value=r.repo;o.textContent=r.repo+' ('+r.decisions+' decisions)';sel.appendChild(o)})
+  if(repos.length>0) loadRepo()
+  else document.getElementById('content').innerHTML='<div class="loading">No repos found</div>'
+}
+
+async function loadRepo(){
+  var repo = document.getElementById('repoSelect').value
+  if(!repo) return
+  document.getElementById('content').innerHTML='<div class="loading"><div class="loading-spinner"></div>Loading coverage...</div>'
+  selectedFile = null
+  try{
+    allData = await fetch('/api/coverage-tree/'+encodeURIComponent(repo)).then(function(r){return r.json()})
+    if(allData.error) throw new Error(allData.error)
+    renderOverview()
+  }catch(e){
+    document.getElementById('content').innerHTML='<div class="loading" style="color:var(--red)">'+esc(e.message)+'</div>'
+  }
+}
+
+// Three-state color for functions
+function fnState(fn){
+  if(fn.decisions>0) return {dot:'#34d27b',bg:'rgba(52,210,123,0.12)',text:'#34d27b',label:'covered',cls:'covered'}
+  if(fn.triageStatus) return {dot:'#5c6478',bg:'rgba(92,100,120,0.15)',text:'#949bae',label:fn.triageStatus==='selected'?'analyzed':'skipped',cls:'reviewed'}
+  return {dot:'#f05656',bg:'rgba(240,86,86,0.12)',text:'#f05656',label:'unchecked',cls:'unchecked'}
+}
+
+// File-level color (based on decisions)
+function fileColor(decisions){
+  if(decisions===0) return {bg:'rgba(240,86,86,0.12)',border:'rgba(240,86,86,0.2)',text:'#f05656'}
+  if(decisions<=1) return {bg:'rgba(232,185,49,0.10)',border:'rgba(232,185,49,0.18)',text:'#e8b931'}
+  return {bg:'rgba(52,210,123,0.10)',border:'rgba(52,210,123,0.18)',text:'#34d27b'}
+}
+
+function renderOverview(){
+  var el = document.getElementById('content'), d = allData
+  var totalFiles = d.files.length
+  var coveredFiles = d.files.filter(function(f){return f.decisions>0}).length
+  var totalFns = d.files.reduce(function(s,f){return s+f.functions.length},0)
+  var coveredFns = d.files.reduce(function(s,f){return s+f.functions.filter(function(fn){return fn.decisions>0}).length},0)
+  var reviewedFns = d.files.reduce(function(s,f){return s+f.functions.filter(function(fn){return fn.decisions===0 && fn.triageStatus}).length},0)
+  var uncheckedFns = totalFns - coveredFns - reviewedFns
+  var totalDec = d.files.reduce(function(s,f){return s+f.decisions},0)
+  var filePct = totalFiles>0?Math.round(coveredFiles/totalFiles*100):0
+  var fnPct = totalFns>0?Math.round(coveredFns/totalFns*100):0
+  var barColor = filePct>70?'var(--green)':filePct>30?'var(--yellow)':'var(--red)'
+
+  var cols = Math.min(4, d.files.length)
+  var treemapCells = d.files.map(function(f,i){
+    var c = fileColor(f.decisions)
+    var fnCount = f.functions.length
+    var covFns = f.functions.filter(function(fn){return fn.decisions>0}).length
+    var revFns = f.functions.filter(function(fn){return fn.decisions===0 && fn.triageStatus}).length
+    var unchk = fnCount - covFns - revFns
+    var shortName = (f.path||f.name).split('/').slice(-2).join('/')
+    return '<div class="treemap-cell" style="background:'+c.bg+';border-color:'+c.border+';opacity:0;animation:fadeUp 0.3s ease-out '+(Math.min(i*20,600))+'ms forwards;transform:translateY(6px)" onclick="drillFile('+i+')">'
+      +'<div><div class="cell-name" style="color:'+c.text+'">'+esc(shortName)+'</div>'
+      +'<div class="cell-fn-count">'+fnCount+' fn</div></div>'
+      +'<div class="cell-meta"><span class="cell-count" style="color:'+c.text+'">'+f.decisions+'</span>d'
+      +(fnCount>0?' <span style="color:#34d27b">'+covFns+'</span>/<span style="color:#949bae">'+revFns+'</span>/<span style="color:#f05656">'+unchk+'</span>':'')
+      +'</div></div>'
+  }).join('')
+
+  var sqlHtml = ''
+  if(d.sql && d.sql.length>0){
+    sqlHtml = '<div class="sql-section"><div class="sql-head">SQL Entities ('+d.sql.length+')</div>'
+    + d.sql.map(function(s){
+      var c = s.decisions>0?{dot:'#34d27b',bg:'rgba(52,210,123,0.12)',text:'#34d27b'}:{dot:'#f05656',bg:'rgba(240,86,86,0.12)',text:'#f05656'}
+      return '<div class="fn-row"><div class="fn-dot" style="background:'+c.dot+'"></div><span class="fn-name">'+esc(s.name)+'</span><span style="font-size:11px;color:var(--text-dim);font-family:var(--mono)">'+s.type+'</span><span class="fn-badge" style="background:'+c.bg+';color:'+c.text+'">'+s.decisions+'</span></div>'
+    }).join('')+'</div>'
+  }
+
+  el.innerHTML = ''
+    +'<div class="stats-row">'
+    +'<div class="stat-pill"><div class="dot" style="background:var(--accent)"></div><span class="val">'+totalFiles+'</span><span class="lbl">files</span></div>'
+    +'<div class="stat-pill"><div class="dot" style="background:var(--green)"></div><span class="val">'+coveredFns+'</span><span class="lbl">covered fn</span></div>'
+    +'<div class="stat-pill"><div class="dot" style="background:var(--text-dim)"></div><span class="val">'+reviewedFns+'</span><span class="lbl">reviewed fn</span></div>'
+    +'<div class="stat-pill"><div class="dot" style="background:var(--red)"></div><span class="val">'+uncheckedFns+'</span><span class="lbl">unchecked fn</span></div>'
+    +'<div class="stat-pill"><div class="dot" style="background:var(--cyan)"></div><span class="val">'+totalDec+'</span><span class="lbl">decisions</span></div>'
+    +'</div>'
+    +'<div class="overall-bar">'
+    +'<div class="overall-label"><span>File coverage</span><span style="font-family:var(--mono);font-weight:700;color:'+barColor+'">'+filePct+'% ('+coveredFiles+'/'+totalFiles+')</span></div>'
+    +'<div class="overall-track"><div class="overall-fill" style="width:'+filePct+'%;background:'+barColor+'" data-pct="'+filePct+'%"></div></div>'
+    +(totalFns>0?'<div class="overall-label" style="margin-top:12px;margin-bottom:10px"><span>Function coverage (with decisions)</span><span style="font-family:var(--mono);font-weight:700;color:'+(fnPct>70?'var(--green)':fnPct>30?'var(--yellow)':'var(--red)')+'">'+fnPct+'% ('+coveredFns+'/'+totalFns+')</span></div>'
+    +'<div class="overall-track"><div class="overall-fill" style="width:'+fnPct+'%;background:'+(fnPct>70?'var(--green)':fnPct>30?'var(--yellow)':'var(--red)')+'" data-pct="'+fnPct+'%"></div></div>':'')
+    +'</div>'
+    +'<div class="legend-bar"><span><div class="ld" style="background:#34d27b"></div> covered</span><span><div class="ld" style="background:#5c6478"></div> reviewed (no decisions)</span><span><div class="ld" style="background:#f05656"></div> never checked</span></div>'
+    +'<div class="breadcrumb"><span class="current">All files</span></div>'
+    +'<div class="treemap" style="grid-template-columns:repeat('+cols+',1fr)">'+treemapCells+'</div>'
+    +sqlHtml
+}
+
+function drillFile(idx){
+  var f = allData.files[idx]
+  selectedFile = idx
+  var el = document.getElementById('content')
+  var fnCov = f.functions.filter(function(fn){return fn.decisions>0}).length
+  var fnRev = f.functions.filter(function(fn){return fn.decisions===0 && fn.triageStatus}).length
+  var fnUnchk = f.functions.length - fnCov - fnRev
+  var fnPct = f.functions.length>0 ? Math.round(fnCov/f.functions.length*100) : 0
+  var fnPctColor = fnPct>70?'var(--green)':fnPct>30?'var(--yellow)':'var(--red)'
+
+  var fnsHtml = ''
+  if(f.functions.length>0){
+    fnsHtml = f.functions.map(function(fn){
+      var st = fnState(fn)
+      var clickable = fn.decisions>0
+      var attrs = clickable ? ' onclick="window.location.href=\'/decisions?q='+encodeURIComponent(fn.name)+'\'" style="cursor:pointer"' : ''
+      return '<div class="fn-row"'+attrs+'>'
+        +'<div class="fn-dot" style="background:'+st.dot+'"></div>'
+        +'<span class="fn-name">'+esc(fn.name)+'</span>'
+        +'<span class="fn-status">'+st.label+(fn.analyzedAt?' &#183; analyzed':'')+'</span>'
+        +'<span class="fn-badge" style="background:'+st.bg+';color:'+st.text+'">'+fn.decisions+'</span>'
+        +'</div>'
+    }).join('')
+  } else {
+    fnsHtml = '<div style="padding:30px;text-align:center;color:var(--text-dim)">No functions found in graph</div>'
+  }
+
+  var decLink = f.decisions>0
+    ? '<a href="/decisions?q='+encodeURIComponent(f.name.replace('.js','').replace('.ts',''))+'" style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--green);text-decoration:none;border-bottom:1px dashed rgba(52,210,123,0.3)">'+f.decisions+' decisions</a>'
+    : '<span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--red)">0 decisions</span>'
+
+  el.innerHTML = ''
+    +'<div class="breadcrumb"><a onclick="renderOverview()">All files</a><span class="sep">&#8250;</span><span class="current">'+esc(f.path||f.name)+'</span></div>'
+    +'<div class="file-detail">'
+    +'<div class="file-detail-head">'
+    +'<h3>'+esc(f.path||f.name)+'</h3>'
+    +'<div style="display:flex;gap:12px;align-items:center">'+decLink
+    +'<span style="font-size:12px;color:var(--text-dim)">'+f.functions.length+' functions</span>'
+    +'</div></div>'
+    +(f.functions.length>0
+      ?'<div style="padding:12px 20px;border-bottom:1px solid var(--border-subtle)">'
+      +'<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;display:flex;justify-content:space-between"><span>Function coverage</span><span style="font-family:var(--mono);font-weight:700;color:'+fnPctColor+'">'+fnPct+'% ('+fnCov+'/'+f.functions.length+')</span></div>'
+      +'<div style="height:8px;background:var(--surface-3);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+fnPct+'%;background:'+fnPctColor+';border-radius:4px;transition:width 0.8s ease"></div></div>'
+      +'<div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--text-dim)">'
+      +'<span style="color:#34d27b">'+fnCov+' covered</span>'
+      +'<span style="color:#949bae">'+fnRev+' reviewed</span>'
+      +'<span style="color:#f05656">'+fnUnchk+' unchecked</span>'
+      +'</div></div>'
+      :'')
+    +'<div class="fn-list">'+fnsHtml+'</div>'
+    +'</div>'
+
+  var nav = '<div style="display:flex;justify-content:space-between;margin-top:16px">'
+  if(idx>0) nav+='<a onclick="drillFile('+(idx-1)+')" style="color:var(--accent);cursor:pointer;font-size:13px">&#8592; '+esc((allData.files[idx-1].path||allData.files[idx-1].name).split('/').pop())+'</a>'; else nav+='<span></span>'
+  if(idx<allData.files.length-1) nav+='<a onclick="drillFile('+(idx+1)+')" style="color:var(--accent);cursor:pointer;font-size:13px">'+esc((allData.files[idx+1].path||allData.files[idx+1].name).split('/').pop())+' &#8594;</a>'; else nav+='<span></span>'
+  nav+='</div>'
+  el.innerHTML += nav
+}
+
+init()
+</script>
+</body>
+</html>

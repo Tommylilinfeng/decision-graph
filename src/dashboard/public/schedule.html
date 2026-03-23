@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CKG — Schedule</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<style>
+  .main { display:flex; flex-direction:column; height:100vh; }
+
+  .content-area {
+    flex: 1; display: grid; grid-template-columns: 380px 1fr;
+    overflow: hidden; min-height: 0;
+  }
+
+  /* ── Controls ─── */
+  .controls {
+    border-right: 1px solid var(--border); padding: 20px;
+    display: flex; flex-direction: column; gap: 14px; overflow-y: auto;
+  }
+  .section-title {
+    font-size: 11px; font-weight: 700; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;
+  }
+  input[type="time"] {
+    width: 100%; background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-family: var(--sans); font-size: 13px;
+    padding: 8px 12px; transition: border-color 0.15s;
+  }
+
+  .phase-grid { display:flex; flex-direction:column; gap:6px; }
+  .phase-toggle {
+    display:flex; align-items:center; gap:10px; padding:8px 12px;
+    background:var(--surface-2); border:1px solid var(--border); border-radius:6px;
+    cursor:pointer; transition:all 0.12s;
+  }
+  .phase-toggle:hover { border-color:var(--text-dim); }
+  .phase-toggle input[type="checkbox"] { width:16px; height:16px; accent-color:var(--accent); cursor:pointer; flex-shrink:0; }
+  .phase-toggle .phase-name { font-size:13px; font-weight:600; flex:1; }
+  .phase-toggle .phase-desc { font-size:11px; color:var(--text-dim); }
+  .phase-toggle .phase-num {
+    font-family:var(--mono); font-size:10px; color:var(--text-dim);
+    background:var(--surface-3); padding:2px 6px; border-radius:3px; flex-shrink:0;
+  }
+
+  .goal-list { display:flex; flex-direction:column; gap:6px; }
+  .goal-item {
+    display:flex; align-items:center; gap:8px; padding:6px 10px;
+    background:var(--surface-2); border:1px solid var(--border); border-radius:6px;
+  }
+  .goal-item .goal-text { flex:1; font-size:13px; font-family:var(--mono); }
+  .goal-item .goal-remove {
+    background:none; border:none; color:var(--text-dim); font-size:16px;
+    cursor:pointer; padding:0 4px; line-height:1;
+  }
+  .goal-item .goal-remove:hover { color:var(--red); }
+  .goal-add-row { display:flex; gap:8px; }
+  .goal-add-row input { flex:1; }
+  .goal-add-row button {
+    padding:8px 14px; background:var(--surface-3); border:1px solid var(--border);
+    border-radius:6px; color:var(--text); font-size:13px; font-weight:600; cursor:pointer;
+    white-space:nowrap;
+  }
+  .goal-add-row button:hover { border-color:var(--accent); color:var(--accent); }
+  .suggestions { display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; }
+  .suggestion {
+    font-size:11px; padding:3px 8px; border-radius:4px;
+    background:var(--surface-3); border:1px solid transparent;
+    color:var(--text-dim); cursor:pointer; transition:all 0.12s;
+  }
+  .suggestion:hover { border-color:var(--accent); color:var(--text); }
+
+  .btn-primary { width:100%; }
+  .btn-danger {
+    width:100%; padding:10px 18px; background:var(--surface-2); color:var(--red);
+    border:1px solid #450a0a; border-radius:6px; font-size:14px; font-weight:700; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .btn-danger:hover { background:#1c1012; }
+  .divider { border:none; border-top:1px solid var(--border); margin:2px 0; }
+  .hint { font-size:11px; color:var(--text-dim); line-height:1.4; margin-top:2px; }
+
+  /* ── Right panel ── */
+  .right-panel { padding: 24px; overflow-y: auto; }
+
+  .status-card {
+    background: var(--surface-0); border: 1px solid var(--border); border-radius: 8px;
+    padding: 20px; margin-bottom: 20px;
+  }
+  .status-row {
+    display: flex; align-items: center; gap: 12px; padding: 8px 0;
+    font-size: 14px;
+  }
+  .status-row + .status-row { border-top: 1px solid var(--border); }
+  .status-label { color: var(--text-dim); width: 100px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .status-value { flex: 1; font-family: var(--mono); font-size: 14px; }
+
+  .badge-dim { background: var(--surface-2); color: var(--text-dim); }
+
+  .countdown {
+    font-family: var(--mono); font-size: 28px; font-weight: 700;
+    color: var(--accent); margin: 8px 0;
+  }
+
+  /* ── History table ── */
+  .history-card {
+    background: var(--surface-0); border: 1px solid var(--border); border-radius: 8px;
+  }
+  .history-header {
+    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    font-size: 14px; font-weight: 600;
+  }
+  .history-table { width: 100%; border-collapse: collapse; }
+  .history-table th {
+    padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700;
+    color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+  }
+  .history-table td {
+    padding: 10px 14px; font-size: 13px; border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+  }
+  .history-table tr:last-child td { border-bottom: none; }
+  .history-empty {
+    padding: 30px; text-align: center; color: var(--text-dim); font-size: 13px; font-style: italic;
+  }
+
+  .flash-msg {
+    position: fixed; top: 16px; right: 16px; padding: 10px 20px;
+    background: #14532d; color: var(--green); border-radius: 6px;
+    font-size: 13px; font-weight: 600; z-index: 100;
+    opacity: 0; transition: opacity 0.3s;
+  }
+  .flash-msg.show { opacity: 1; }
+
+  /* ── Enable toggle ── */
+  .toggle-row {
+    display: flex; align-items: center; gap: 12px; padding: 10px 0;
+  }
+  .toggle-switch {
+    position: relative; width: 44px; height: 24px; flex-shrink: 0;
+  }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--surface-3); border: 1px solid var(--border); border-radius: 12px;
+    transition: all 0.2s;
+  }
+  .toggle-slider:before {
+    content: ''; position: absolute; height: 18px; width: 18px;
+    left: 2px; bottom: 2px; background: var(--text-dim); border-radius: 50%;
+    transition: all 0.2s;
+  }
+  .toggle-switch input:checked + .toggle-slider { background: #1e3a5f; border-color: var(--accent); }
+  .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); background: var(--accent); }
+  .toggle-label { font-size: 14px; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<nav class="sidebar" id="sidebar"></nav>
+<script src="/sidebar.js"></script>
+
+<div class="main">
+  <div class="page-header">
+    <h2>Nightly Schedule</h2>
+  </div>
+
+  <div class="content-area">
+    <!-- Left: Config -->
+    <div class="controls">
+      <!-- Enable toggle -->
+      <div class="toggle-row">
+        <label class="toggle-switch">
+          <input type="checkbox" id="enableToggle">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label" id="toggleLabel">Disabled</span>
+      </div>
+
+      <!-- Time -->
+      <div class="field">
+        <label>Run at (daily)</label>
+        <input type="time" id="scheduleTime" value="02:00">
+        <div class="hint">Pipeline will run at this time every day when enabled</div>
+      </div>
+
+      <hr class="divider">
+
+      <!-- Phases -->
+      <div>
+        <div class="section-title">Phases</div>
+        <div class="phase-grid" id="phaseGrid">
+          <label class="phase-toggle">
+            <input type="checkbox" data-phase="schema" checked>
+            <span class="phase-num">1</span>
+            <span class="phase-name">Schema</span>
+            <span class="phase-desc">Initialize indexes</span>
+          </label>
+          <label class="phase-toggle">
+            <input type="checkbox" data-phase="ingest" checked>
+            <span class="phase-num">2</span>
+            <span class="phase-name">Ingest</span>
+            <span class="phase-desc">Import CPG</span>
+          </label>
+          <label class="phase-toggle">
+            <input type="checkbox" data-phase="link" checked>
+            <span class="phase-num">3</span>
+            <span class="phase-name">Link</span>
+            <span class="phase-desc">Cross-service linking</span>
+          </label>
+          <label class="phase-toggle">
+            <input type="checkbox" data-phase="cold-start" checked>
+            <span class="phase-num">4</span>
+            <span class="phase-name">Cold Start</span>
+            <span class="phase-desc">AI decision extraction</span>
+          </label>
+          <label class="phase-toggle">
+            <input type="checkbox" data-phase="sessions" checked>
+            <span class="phase-num">5</span>
+            <span class="phase-name">Sessions</span>
+            <span class="phase-desc">Session decision ingestion</span>
+          </label>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <!-- Goals -->
+      <div>
+        <div class="section-title">Cold Start Goals</div>
+        <div class="goal-list" id="goalList"></div>
+        <div class="goal-add-row">
+          <input type="text" id="goalInput" placeholder="Enter analysis goal...">
+          <button onclick="addGoal()">+ Add</button>
+        </div>
+        <div class="suggestions">
+          <span class="suggestion" onclick="addGoalDirect('order flow and payments')">Orders</span>
+          <span class="suggestion" onclick="addGoalDirect('coupon system')">Coupons</span>
+          <span class="suggestion" onclick="addGoalDirect('cart and customization')">Cart</span>
+          <span class="suggestion" onclick="addGoalDirect('menu and vendor availability')">Menu</span>
+          <span class="suggestion" onclick="addGoalDirect('auth and user profile')">Users</span>
+          <span class="suggestion" onclick="addGoalDirect('full business logic analysis')">All</span>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <!-- Parameters -->
+      <div class="row">
+        <div class="field">
+          <label>Repo</label>
+          <select id="repoSelect"><option value="">All repos</option></select>
+        </div>
+        <div class="field">
+          <label>Concurrency</label>
+          <input type="number" id="concurrencyInput" value="2" min="1" max="8">
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label>Owner</label>
+          <input type="text" id="ownerInput" value="me" placeholder="me">
+        </div>
+      </div>
+
+      <!-- Flags -->
+      <div>
+        <div class="checkbox-field">
+          <input type="checkbox" id="forceCheck">
+          <label for="forceCheck">Force — re-analyze all</label>
+        </div>
+        <div class="checkbox-field" style="margin-top:6px">
+          <input type="checkbox" id="deepCheck">
+          <label for="deepCheck">Deep check — re-analyze dependency changes too</label>
+        </div>
+        <div class="checkbox-field" style="margin-top:6px">
+          <input type="checkbox" id="dryRunCheck">
+          <label for="dryRunCheck">Dry run — no database writes</label>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <button class="btn-primary" id="saveBtn" onclick="saveSchedule()">
+        Save Schedule
+      </button>
+    </div>
+
+    <!-- Right: Status & History -->
+    <div class="right-panel">
+      <div class="status-card">
+        <div class="status-row">
+          <span class="status-label">Status</span>
+          <span class="status-value" id="statusValue"><span class="badge badge-dim">DISABLED</span></span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">Next Run</span>
+          <span class="status-value" id="nextRunValue">--</span>
+        </div>
+        <div class="status-row" style="border-top:none; padding-top:0;">
+          <span class="status-label"></span>
+          <div class="countdown" id="countdown">--:--:--</div>
+        </div>
+        <div class="status-row">
+          <span class="status-label">Last Run</span>
+          <span class="status-value" id="lastRunValue">--</span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">Pipeline</span>
+          <span class="status-value" id="pipelineStatus">--</span>
+        </div>
+      </div>
+
+      <div class="history-card">
+        <div class="history-header">Run History</div>
+        <div id="historyBody">
+          <div class="history-empty">No scheduled runs yet</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="flash-msg" id="flashMsg">Saved</div>
+
+<script>
+  let goals = []
+  let nextRunAt = null
+  let countdownInterval = null
+
+  // ── Init ──
+  fetch('/api/schedule').then(r => r.json()).then(data => {
+    if (data.config) {
+      const cfg = data.config
+      document.getElementById('enableToggle').checked = cfg.enabled
+      document.getElementById('scheduleTime').value = cfg.time || '02:00'
+      updateToggleLabel(cfg.enabled)
+
+      if (cfg.pipelineConfig) {
+        const pc = cfg.pipelineConfig
+        goals = pc.goals || []
+        renderGoals()
+        document.getElementById('concurrencyInput').value = pc.concurrency || 2
+        document.getElementById('ownerInput').value = pc.owner || 'me'
+        if (pc.repo) document.getElementById('repoSelect').value = pc.repo
+        document.getElementById('forceCheck').checked = !!pc.force
+        document.getElementById('deepCheck').checked = !!pc.deepCheck
+        document.getElementById('dryRunCheck').checked = !!pc.dryRun
+
+        // Uncheck skipped phases
+        for (const sp of pc.skipPhases || []) {
+          const cb = document.querySelector(`#phaseGrid input[data-phase="${sp}"]`)
+          if (cb) cb.checked = false
+        }
+      }
+    }
+
+    nextRunAt = data.nextRunAt
+    updateStatus(data)
+    renderHistory(data.history || [])
+    startCountdown()
+  }).catch(() => {})
+
+  // Load repos
+  fetch('/api/cold-start/config').then(r => r.json()).then(data => {
+    const sel = document.getElementById('repoSelect')
+    for (const repo of data.repos || []) {
+      const opt = document.createElement('option')
+      opt.value = repo.name
+      opt.textContent = `${repo.name} (${repo.type})`
+      sel.appendChild(opt)
+    }
+  }).catch(() => {})
+
+  // ── Toggle ──
+  document.getElementById('enableToggle').addEventListener('change', function() {
+    updateToggleLabel(this.checked)
+  })
+
+  function updateToggleLabel(enabled) {
+    document.getElementById('toggleLabel').textContent = enabled ? 'Enabled' : 'Disabled'
+    document.getElementById('toggleLabel').style.color = enabled ? 'var(--green)' : 'var(--text-dim)'
+  }
+
+  // ── Goals ──
+  function renderGoals() {
+    const list = document.getElementById('goalList')
+    list.innerHTML = ''
+    goals.forEach((g, i) => {
+      const div = document.createElement('div')
+      div.className = 'goal-item'
+      div.innerHTML = `<span class="goal-text">${escHtml(g)}</span><button class="goal-remove" onclick="removeGoal(${i})">&times;</button>`
+      list.appendChild(div)
+    })
+  }
+  function addGoal() {
+    const input = document.getElementById('goalInput')
+    const val = input.value.trim()
+    if (!val) return
+    goals.push(val)
+    input.value = ''
+    renderGoals()
+  }
+  function addGoalDirect(text) {
+    if (!goals.includes(text)) { goals.push(text); renderGoals() }
+  }
+  function removeGoal(idx) {
+    goals.splice(idx, 1)
+    renderGoals()
+  }
+  document.getElementById('goalInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); addGoal() }
+  })
+  function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+  // ── Save ──
+  async function saveSchedule() {
+    const skipPhases = []
+    document.querySelectorAll('#phaseGrid input[type="checkbox"]').forEach(cb => {
+      if (!cb.checked) skipPhases.push(cb.dataset.phase)
+    })
+
+    const payload = {
+      enabled: document.getElementById('enableToggle').checked,
+      time: document.getElementById('scheduleTime').value,
+      pipelineConfig: {
+        goals,
+        concurrency: parseInt(document.getElementById('concurrencyInput').value) || 2,
+        owner: document.getElementById('ownerInput').value.trim() || 'me',
+        repo: document.getElementById('repoSelect').value || null,
+        force: document.getElementById('forceCheck').checked,
+        deepCheck: document.getElementById('deepCheck').checked,
+        dryRun: document.getElementById('dryRunCheck').checked,
+        skipPhases,
+      },
+    }
+
+    try {
+      const res = await fetch('/api/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        nextRunAt = data.nextRunAt
+        flash('Schedule saved')
+        // Refresh status
+        fetch('/api/schedule').then(r => r.json()).then(d => {
+          updateStatus(d)
+          renderHistory(d.history || [])
+        })
+      } else {
+        flash(data.error || 'Failed to save', true)
+      }
+    } catch (err) {
+      flash('Error: ' + err.message, true)
+    }
+  }
+
+  function flash(msg, isError) {
+    const el = document.getElementById('flashMsg')
+    el.textContent = msg
+    el.style.background = isError ? '#450a0a' : '#14532d'
+    el.style.color = isError ? 'var(--red)' : 'var(--green)'
+    el.classList.add('show')
+    setTimeout(() => el.classList.remove('show'), 2000)
+  }
+
+  // ── Status ──
+  function updateStatus(data) {
+    const enabled = data.config?.enabled
+    const statusEl = document.getElementById('statusValue')
+    if (enabled) {
+      statusEl.innerHTML = '<span class="badge badge-green">ENABLED</span> &mdash; daily at ' + escHtml(data.config.time)
+    } else {
+      statusEl.innerHTML = '<span class="badge badge-dim">DISABLED</span>'
+    }
+
+    const nextEl = document.getElementById('nextRunValue')
+    if (data.nextRunAt) {
+      nextRunAt = data.nextRunAt
+      nextEl.textContent = new Date(data.nextRunAt).toLocaleString()
+    } else {
+      nextRunAt = null
+      nextEl.textContent = '--'
+      document.getElementById('countdown').textContent = '--:--:--'
+    }
+
+    // Last run
+    const lastEl = document.getElementById('lastRunValue')
+    const history = data.history || []
+    if (history.length > 0) {
+      const last = history[0]
+      const date = new Date(last.startedAt).toLocaleString()
+      const badgeCls = last.status === 'done' ? 'badge-green' : last.status === 'skipped' ? 'badge-yellow' : 'badge-red'
+      const dur = last.duration > 0 ? ` (${Math.round(last.duration / 1000)}s)` : ''
+      lastEl.innerHTML = `<span class="badge ${badgeCls}">${last.status}</span> ${date}${dur}`
+    } else {
+      lastEl.textContent = '--'
+    }
+
+    // Pipeline status
+    const pipEl = document.getElementById('pipelineStatus')
+    const ps = data.pipelineStatus || 'idle'
+    const psCls = ps === 'running' ? 'badge-yellow' : ps === 'done' ? 'badge-green' : ps === 'error' ? 'badge-red' : 'badge-dim'
+    pipEl.innerHTML = `<span class="badge ${psCls}">${ps}</span>`
+  }
+
+  // ── Countdown ──
+  function startCountdown() {
+    if (countdownInterval) clearInterval(countdownInterval)
+    countdownInterval = setInterval(() => {
+      const el = document.getElementById('countdown')
+      if (!nextRunAt) { el.textContent = '--:--:--'; return }
+      const diff = nextRunAt - Date.now()
+      if (diff <= 0) {
+        el.textContent = 'Running...'
+        // Refresh status
+        fetch('/api/schedule').then(r => r.json()).then(d => {
+          nextRunAt = d.nextRunAt
+          updateStatus(d)
+          renderHistory(d.history || [])
+        })
+        return
+      }
+      const h = Math.floor(diff / 3600000)
+      const m = Math.floor((diff % 3600000) / 60000)
+      const s = Math.floor((diff % 60000) / 1000)
+      el.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+    }, 1000)
+  }
+
+  // ── History ──
+  function renderHistory(history) {
+    const body = document.getElementById('historyBody')
+    if (!history || history.length === 0) {
+      body.innerHTML = '<div class="history-empty">No scheduled runs yet</div>'
+      return
+    }
+    let html = '<table class="history-table"><thead><tr><th>Date</th><th>Status</th><th>Duration</th><th>Goals</th></tr></thead><tbody>'
+    for (const run of history) {
+      const date = new Date(run.startedAt).toLocaleString()
+      const badgeCls = run.status === 'done' ? 'badge-green' : run.status === 'skipped' ? 'badge-yellow' : 'badge-red'
+      const dur = run.duration > 0 ? formatDuration(run.duration) : '--'
+      const goalsStr = (run.goals || []).join(', ') || '--'
+      html += `<tr><td>${date}</td><td><span class="badge ${badgeCls}">${run.status}</span></td><td>${dur}</td><td style="font-family:var(--sans);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(goalsStr)}">${escHtml(goalsStr)}</td></tr>`
+    }
+    html += '</tbody></table>'
+    body.innerHTML = html
+  }
+
+  function formatDuration(ms) {
+    const sec = Math.floor(ms / 1000)
+    if (sec < 60) return sec + 's'
+    const min = Math.floor(sec / 60)
+    return min + 'm ' + (sec % 60) + 's'
+  }
+</script>
+</body>
+</html>

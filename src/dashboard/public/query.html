@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CKG &#8212; Query Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<style>
+.main{display:flex;flex-direction:column}
+
+/* Editor area */
+.editor-area{padding:20px 28px;border-bottom:1px solid var(--border-subtle);background:var(--surface-0)}
+.editor-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.editor-header h2{font-family:var(--sans);font-size:24px;font-weight:600}
+.editor-actions{display:flex;gap:8px;align-items:center}
+.run-btn{padding:8px 20px;border-radius:var(--radius-sm);font-size:13px;font-weight:700;background:var(--accent);color:white;border:none;cursor:pointer;transition:all var(--transition-fast);display:flex;align-items:center;gap:6px;font-family:var(--sans)}
+.run-btn:hover{background:#5c9aff;transform:translateY(-1px)}
+.run-btn:active{transform:translateY(0)}
+.run-btn:disabled{opacity:0.5;cursor:not-allowed;transform:none}
+.run-btn .shortcut{font-size:10px;opacity:0.7;font-family:var(--mono)}
+.clear-btn{padding:8px 14px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;background:var(--surface-2);color:var(--text-dim);border:1px solid var(--border);cursor:pointer;transition:all var(--transition-fast);font-family:var(--sans)}
+.clear-btn:hover{color:var(--text);border-color:var(--accent)}
+
+.query-input{width:100%;min-height:100px;max-height:300px;padding:14px 16px;background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--mono);font-size:13px;line-height:1.7;resize:vertical;outline:none;transition:border-color var(--transition-fast);tab-size:2}
+.query-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.query-input::placeholder{color:var(--text-dim)}
+
+/* Presets */
+.presets{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.preset-btn{padding:4px 12px;border-radius:100px;font-size:11px;font-weight:500;font-family:var(--mono);background:var(--surface-2);border:1px solid var(--border-subtle);color:var(--text-dim);cursor:pointer;transition:all var(--transition-fast);white-space:nowrap}
+.preset-btn:hover{color:var(--accent);border-color:rgba(77,142,255,0.3);background:var(--accent-surface)}
+
+/* Results area */
+.results-area{flex:1;overflow:auto;padding:0}
+.result-bar{display:flex;align-items:center;justify-content:space-between;padding:10px 28px;background:var(--surface-1);border-bottom:1px solid var(--border-subtle);font-size:12px;position:sticky;top:0;z-index:10}
+.result-info{display:flex;align-items:center;gap:16px;color:var(--text-dim)}
+.result-info .ri-val{font-family:var(--mono);font-weight:700;color:var(--text-secondary)}
+.result-info .ri-ok{color:var(--green)}.result-info .ri-err{color:var(--red)}
+.result-tabs{display:flex;gap:2px}
+.result-tab{padding:5px 14px;border-radius:var(--radius-sm);font-size:12px;font-weight:600;color:var(--text-dim);background:transparent;border:none;cursor:pointer;transition:all var(--transition-fast);font-family:var(--sans)}
+.result-tab:hover{color:var(--text-secondary)}.result-tab.active{color:var(--accent);background:var(--accent-surface)}
+
+/* Table view */
+.result-table-wrap{overflow:auto;padding:0 28px 28px}
+table.result-table{width:100%;border-collapse:collapse;font-size:13px;margin-top:0}
+table.result-table th{padding:10px 14px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-dim);background:var(--surface-0);border-bottom:2px solid var(--border);position:sticky;top:0;font-family:var(--mono)}
+table.result-table td{padding:9px 14px;border-bottom:1px solid var(--border-subtle);font-family:var(--mono);font-size:12px;color:var(--text-secondary);max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top}
+table.result-table tr:hover td{background:var(--surface-2)}
+table.result-table td.cell-node{color:var(--accent)}
+table.result-table td.cell-num{color:var(--cyan)}
+table.result-table td.cell-null{color:var(--text-dim);font-style:italic}
+td .expand-btn{font-size:10px;color:var(--accent);cursor:pointer;margin-left:6px;opacity:0.6}
+td .expand-btn:hover{opacity:1}
+
+/* JSON view */
+.result-json{padding:20px 28px;font-family:var(--mono);font-size:12px;line-height:1.7;color:var(--text-secondary);white-space:pre-wrap;word-break:break-all;max-height:calc(100vh - 300px);overflow:auto}
+
+/* Error */
+.result-error{padding:28px;color:var(--red);font-family:var(--mono);font-size:13px;line-height:1.6;white-space:pre-wrap}
+
+/* Empty */
+.result-empty{padding:60px 28px;text-align:center;color:var(--text-dim)}
+.result-empty .icon{font-size:32px;margin-bottom:12px;opacity:0.3}
+.result-empty p{font-size:13px}
+
+/* Mode tabs */
+.mode-tabs{display:flex;gap:2px;background:var(--surface-2);border-radius:var(--radius-sm);padding:2px}
+.mode-tab{padding:6px 16px;border-radius:4px;font-size:12px;font-weight:600;color:var(--text-dim);background:transparent;border:none;cursor:pointer;transition:all var(--transition-fast);font-family:var(--sans)}
+.mode-tab:hover{color:var(--text-secondary)}
+.mode-tab.active{color:var(--accent);background:var(--accent-surface)}
+
+/* Semantic results */
+.semantic-result{padding:16px 28px;border-bottom:1px solid var(--border-subtle);transition:background var(--transition-fast)}
+.semantic-result:hover{background:var(--surface-2)}
+.sr-header{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.sr-score{font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;background:var(--accent-surface);color:var(--accent)}
+.sr-type{font-size:10px;font-weight:700;text-transform:uppercase;padding:2px 8px;border-radius:4px}
+.sr-type.decision{background:var(--accent-surface);color:var(--accent)}
+.sr-type.bug{background:var(--red-surface);color:var(--red)}
+.sr-type.suboptimal{background:rgba(232,185,49,0.08);color:var(--yellow)}
+.sr-summary{font-size:14px;font-weight:600;margin-bottom:4px}
+.sr-content{font-size:12px;color:var(--text-secondary);line-height:1.6;max-height:60px;overflow:hidden}
+.sr-meta{display:flex;gap:12px;margin-top:8px;font-size:11px;color:var(--text-dim)}
+.sr-meta .kw{padding:2px 6px;border-radius:3px;background:var(--surface-3);font-family:var(--mono);font-size:10px}
+
+/* History */
+.history-panel{padding:20px 28px}
+.history-item{display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border-subtle);cursor:pointer;transition:background var(--transition-fast)}
+.history-item:hover{background:var(--surface-2);margin:0 -28px;padding:10px 28px}
+.history-item:last-child{border-bottom:none}
+.history-query{font-family:var(--mono);font-size:12px;color:var(--text-secondary);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.history-meta{font-size:11px;color:var(--text-dim);white-space:nowrap;display:flex;align-items:center;gap:8px}
+.history-meta .hm-rows{font-family:var(--mono);font-weight:700}
+</style>
+</head>
+<body>
+<nav class="sidebar" id="sidebar"></nav>
+<script src="/sidebar.js"></script>
+
+<div class="main">
+  <div class="editor-area">
+    <div class="editor-header">
+      <h2>Query Console</h2>
+      <div class="editor-actions">
+        <div class="mode-tabs">
+          <button class="mode-tab active" id="modeCypher" onclick="switchMode('cypher')">Cypher</button>
+          <button class="mode-tab" id="modeSemantic" onclick="switchMode('semantic')">Semantic Search</button>
+        </div>
+        <button class="clear-btn" onclick="clearEditor()">Clear</button>
+        <button class="run-btn" id="runBtn" onclick="runCurrent()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Run <span class="shortcut">&#8984;&#x23CE;</span>
+        </button>
+      </div>
+    </div>
+    <textarea class="query-input" id="queryInput" placeholder="MATCH (n) RETURN n LIMIT 10" spellcheck="false">MATCH (n) RETURN labels(n) AS label, count(n) AS count ORDER BY count DESC</textarea>
+    <input type="text" class="query-input" id="semanticInput" placeholder="Search design decisions... e.g.: why does order payment use async" style="display:none;min-height:auto;padding:14px 16px;font-family:var(--sans);font-size:14px" spellcheck="false">
+    <div class="presets" id="cypherPresets">
+      <button class="preset-btn" onclick="setQuery('MATCH (n) RETURN labels(n) AS label, count(n) AS count ORDER BY count DESC')">Node counts</button>
+      <button class="preset-btn" onclick="setQuery('MATCH ()-[r]->() RETURN type(r) AS type, count(r) AS count ORDER BY count DESC')">Edge counts</button>
+      <button class="preset-btn" onclick="setQuery('MATCH (d:DecisionContext) RETURN d.summary, d.finding_type, d.source ORDER BY d.created_at DESC LIMIT 20')">Recent decisions</button>
+      <button class="preset-btn" onclick="setQuery('MATCH (d:DecisionContext)-[:ANCHORED_TO]->(ce:CodeEntity) RETURN d.summary, ce.name, ce.entity_type LIMIT 20')">Anchored decisions</button>
+      <button class="preset-btn" onclick="setQuery('MATCH (f:CodeEntity {entity_type: &quot;function&quot;}) RETURN f.name, f.triage_status, f.analyzed_at ORDER BY f.triage_status LIMIT 30')">Triage status</button>
+      <button class="preset-btn" onclick="setQuery('SHOW STORAGE INFO')">Storage info</button>
+      <button class="preset-btn" onclick="setQuery('SHOW INDEX INFO')">Indexes</button>
+      <button class="preset-btn" onclick="setQuery('MATCH (d:DecisionContext) DETACH DELETE d RETURN count(d) AS deleted')">Delete all decisions</button>
+    </div>
+  </div>
+
+  <div class="results-area" id="resultsArea">
+    <div class="result-empty"><p>Run a Cypher query to see results</p></div>
+  </div>
+</div>
+
+<script>
+var history = JSON.parse(localStorage.getItem('ckg-query-history') || '[]')
+var lastResult = null
+var currentView = 'table'
+var currentMode = 'cypher'
+
+function esc(s){return !s?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+function switchMode(mode) {
+  currentMode = mode
+  document.getElementById('modeCypher').className = 'mode-tab' + (mode === 'cypher' ? ' active' : '')
+  document.getElementById('modeSemantic').className = 'mode-tab' + (mode === 'semantic' ? ' active' : '')
+  document.getElementById('queryInput').style.display = mode === 'cypher' ? '' : 'none'
+  document.getElementById('semanticInput').style.display = mode === 'semantic' ? '' : 'none'
+  document.getElementById('cypherPresets').style.display = mode === 'cypher' ? '' : 'none'
+  if (mode === 'semantic') document.getElementById('semanticInput').focus()
+  else document.getElementById('queryInput').focus()
+}
+
+function runCurrent() {
+  if (currentMode === 'semantic') runSemanticSearch()
+  else runQuery()
+}
+
+function setQuery(q){
+  document.getElementById('queryInput').value = q
+  document.getElementById('queryInput').focus()
+}
+
+function clearEditor(){
+  document.getElementById('queryInput').value = ''
+  document.getElementById('semanticInput').value = ''
+  if (currentMode === 'cypher') document.getElementById('queryInput').focus()
+  else document.getElementById('semanticInput').focus()
+}
+
+// Keyboard shortcut: Cmd+Enter or Ctrl+Enter to run
+document.addEventListener('keydown', function(e){
+  if((e.metaKey || e.ctrlKey) && e.key === 'Enter'){
+    e.preventDefault()
+    runCurrent()
+  }
+})
+
+// Enter in semantic input
+document.getElementById('semanticInput').addEventListener('keydown', function(e){
+  if(e.key === 'Enter'){ e.preventDefault(); runSemanticSearch() }
+})
+
+async function runSemanticSearch(){
+  var query = document.getElementById('semanticInput').value.trim()
+  if(!query) return
+
+  var btn = document.getElementById('runBtn')
+  btn.disabled = true
+  document.getElementById('resultsArea').innerHTML = '<div class="result-empty"><p>Searching decisions...</p></div>'
+
+  try {
+    var res = await fetch('/api/search/semantic', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({query: query, limit: 20})
+    })
+    var data = await res.json()
+    if(data.error){
+      document.getElementById('resultsArea').innerHTML = '<div class="result-bar"><div class="result-info"><span class="ri-err">&#x2717; '+esc(data.error)+'</span></div></div>'
+      return
+    }
+    renderSemanticResults(data)
+  }catch(e){
+    document.getElementById('resultsArea').innerHTML = '<div class="result-error">Network error: '+esc(e.message)+'</div>'
+  }finally{
+    btn.disabled = false
+  }
+}
+
+function renderSemanticResults(data){
+  var area = document.getElementById('resultsArea')
+  var results = data.results || []
+
+  var barHtml = '<div class="result-bar"><div class="result-info">'
+    +'<span><span class="ri-val ri-ok">'+results.length+'</span> results</span>'
+    +'<span>query: <span class="ri-val">'+esc(data.query)+'</span></span>'
+    +'</div></div>'
+
+  if(results.length === 0){
+    area.innerHTML = barHtml + '<div class="result-empty"><p>No matching decisions found</p></div>'
+    return
+  }
+
+  var items = results.map(function(r){
+    var typeClass = r.finding_type === 'bug' ? 'bug' : r.finding_type === 'suboptimal' ? 'suboptimal' : 'decision'
+    var kws = (r.keywords || []).slice(0,5).map(function(k){return '<span class="kw">'+esc(k)+'</span>'}).join('')
+    var anchors = (r.anchors || []).map(function(a){return esc(a)}).join(', ')
+    return '<div class="semantic-result">'
+      +'<div class="sr-header">'
+      +'<span class="sr-score">'+((r.score||0)*100).toFixed(1)+'%</span>'
+      +'<span class="sr-type '+typeClass+'">'+esc(r.finding_type||'decision')+'</span>'
+      +'</div>'
+      +'<div class="sr-summary">'+esc(r.summary)+'</div>'
+      +'<div class="sr-content">'+esc(r.content)+'</div>'
+      +'<div class="sr-meta">'
+      +(r.source ? '<span>'+esc(r.source)+'</span>' : '')
+      +(anchors ? '<span>→ '+anchors+'</span>' : '')
+      +kws
+      +'</div></div>'
+  }).join('')
+
+  area.innerHTML = barHtml + items
+}
+
+async function runQuery(){
+  var query = document.getElementById('queryInput').value.trim()
+  if(!query) return
+
+  var btn = document.getElementById('runBtn')
+  btn.disabled = true
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg> Running...'
+  document.getElementById('resultsArea').innerHTML = '<div class="result-empty"><p>Executing query...</p></div>'
+
+  try{
+    var res = await fetch('/api/query', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({query: query})
+    })
+    var data = await res.json()
+
+    // Save to history
+    history.unshift({query: query, time: new Date().toISOString(), rows: data.rowCount || 0, elapsed: data.elapsed, error: data.error || null})
+    if(history.length > 50) history = history.slice(0, 50)
+    try{localStorage.setItem('ckg-query-history', JSON.stringify(history))}catch(e){}
+
+    lastResult = data
+    currentView = 'table'
+
+    if(data.error){
+      renderError(data)
+    } else {
+      renderResults(data)
+    }
+  }catch(e){
+    document.getElementById('resultsArea').innerHTML = '<div class="result-error">Network error: '+esc(e.message)+'</div>'
+  }finally{
+    btn.disabled = false
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Run <span class="shortcut">&#8984;&#x23CE;</span>'
+  }
+}
+
+function renderError(data){
+  var area = document.getElementById('resultsArea')
+  area.innerHTML = '<div class="result-bar"><div class="result-info"><span class="ri-err">&#x2717; Error</span><span>'+data.elapsed+'ms</span></div></div>'
+    +'<div class="result-error">'+esc(data.error)+'</div>'
+}
+
+function renderResults(data){
+  var area = document.getElementById('resultsArea')
+
+  // Result bar
+  var barHtml = '<div class="result-bar"><div class="result-info">'
+    +'<span><span class="ri-val ri-ok">'+data.rowCount+'</span> rows</span>'
+    +'<span><span class="ri-val">'+data.elapsed+'</span>ms</span>'
+  if(data.counters){
+    var c = data.counters
+    var parts = []
+    if(c.nodesCreated) parts.push(c.nodesCreated+' created')
+    if(c.nodesDeleted) parts.push(c.nodesDeleted+' deleted')
+    if(c.relationshipsCreated) parts.push(c.relationshipsCreated+' rels created')
+    if(c.relationshipsDeleted) parts.push(c.relationshipsDeleted+' rels deleted')
+    if(c.propertiesSet) parts.push(c.propertiesSet+' props set')
+    if(parts.length>0) barHtml += '<span class="ri-val" style="color:var(--yellow)">'+parts.join(', ')+'</span>'
+  }
+  barHtml += '</div><div class="result-tabs">'
+    +'<button class="result-tab'+(currentView==='table'?' active':'')+'" onclick="switchView(\'table\')">Table</button>'
+    +'<button class="result-tab'+(currentView==='json'?' active':'')+'" onclick="switchView(\'json\')">JSON</button>'
+    +'<button class="result-tab'+(currentView==='history'?' active':'')+'" onclick="switchView(\'history\')">History ('+history.length+')</button>'
+    +'</div></div>'
+
+  if(data.rowCount === 0){
+    area.innerHTML = barHtml + '<div class="result-empty"><p>Query returned 0 rows</p></div>'
+    return
+  }
+
+  if(currentView === 'json'){
+    area.innerHTML = barHtml + '<div class="result-json">'+esc(JSON.stringify(data.rows, null, 2))+'</div>'
+    return
+  }
+
+  if(currentView === 'history'){
+    renderHistory(barHtml)
+    return
+  }
+
+  // Table view
+  var cols = data.columns
+  var thHtml = cols.map(function(c){return '<th>'+esc(c)+'</th>'}).join('')
+  var tbHtml = data.rows.map(function(row){
+    return '<tr>'+cols.map(function(c){
+      var val = row[c]
+      if(val === null || val === undefined) return '<td class="cell-null">null</td>'
+      if(typeof val === 'number') return '<td class="cell-num">'+val+'</td>'
+      if(typeof val === 'object'){
+        var json = JSON.stringify(val)
+        var short = json.length > 80 ? json.slice(0,80)+'...' : json
+        if(val._type === 'node') return '<td class="cell-node" title="'+esc(json)+'">'+esc(short)+'</td>'
+        return '<td title="'+esc(json)+'">'+esc(short)+'</td>'
+      }
+      var s = String(val)
+      if(s.length > 100) return '<td title="'+esc(s)+'">'+esc(s.slice(0,100))+'...</td>'
+      return '<td>'+esc(s)+'</td>'
+    }).join('')+'</tr>'
+  }).join('')
+
+  area.innerHTML = barHtml
+    +'<div class="result-table-wrap"><table class="result-table"><thead><tr>'+thHtml+'</tr></thead><tbody>'+tbHtml+'</tbody></table></div>'
+}
+
+function switchView(view){
+  currentView = view
+  if(view === 'history'){
+    var barHtml = '<div class="result-bar"><div class="result-info"><span>Query history</span></div><div class="result-tabs">'
+      +'<button class="result-tab" onclick="switchView(\'table\')">Table</button>'
+      +'<button class="result-tab" onclick="switchView(\'json\')">JSON</button>'
+      +'<button class="result-tab active" onclick="switchView(\'history\')">History ('+history.length+')</button>'
+      +'</div></div>'
+    renderHistory(barHtml)
+    return
+  }
+  if(lastResult && !lastResult.error) renderResults(lastResult)
+}
+
+function renderHistory(barHtml){
+  var area = document.getElementById('resultsArea')
+  if(history.length === 0){
+    area.innerHTML = barHtml + '<div class="result-empty"><p>No query history yet</p></div>'
+    return
+  }
+  var items = history.map(function(h,i){
+    var time = new Date(h.time).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})
+    var date = new Date(h.time).toLocaleDateString('en-US',{month:'short',day:'numeric'})
+    var statusColor = h.error ? 'var(--red)' : 'var(--green)'
+    return '<div class="history-item" onclick="setQuery(\''+esc(h.query.replace(/'/g,"\\'"))+'\')">'
+      +'<div class="history-query">'+esc(h.query)+'</div>'
+      +'<div class="history-meta">'
+      +'<span class="hm-rows" style="color:'+statusColor+'">'+(h.error?'ERR':h.rows+' rows')+'</span>'
+      +'<span>'+h.elapsed+'ms</span>'
+      +'<span>'+date+' '+time+'</span>'
+      +'</div></div>'
+  }).join('')
+  area.innerHTML = barHtml + '<div class="history-panel">'+items+'</div>'
+}
+
+// Tab support in textarea
+document.getElementById('queryInput').addEventListener('keydown', function(e){
+  if(e.key === 'Tab'){
+    e.preventDefault()
+    var start = this.selectionStart, end = this.selectionEnd
+    this.value = this.value.substring(0,start) + '  ' + this.value.substring(end)
+    this.selectionStart = this.selectionEnd = start + 2
+  }
+})
+</script>
+</body>
+</html>

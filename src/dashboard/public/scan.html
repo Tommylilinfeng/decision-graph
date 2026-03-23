@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CKG — Quick Scan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<style>
+  .main { display:flex; flex-direction:column; height:100vh; }
+
+  .scan-hero {
+    padding: 36px 40px 28px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: linear-gradient(180deg, rgba(77,142,255,0.03) 0%, transparent 100%);
+  }
+  .scan-hero h2 { font-size:28px; font-weight:600; letter-spacing:-0.5px; margin-bottom:8px; }
+  .scan-hero p { font-size:14px; color:var(--text-dim); line-height:1.6; }
+
+  /* Input area */
+  .scan-input-area {
+    padding: 24px 40px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+    flex-shrink: 0;
+  }
+  .scan-field { flex:1; }
+  .scan-field label {
+    display:block; font-size:11px; font-weight:700;
+    color:var(--text-dim); text-transform:uppercase;
+    letter-spacing:0.5px; margin-bottom:6px;
+  }
+  .scan-field input {
+    width:100%; padding:10px 14px;
+    background:var(--surface-1); border:1px solid var(--border);
+    border-radius:var(--radius-sm); color:var(--text);
+    font-family:var(--mono); font-size:14px;
+    outline:none; transition:border-color var(--transition-fast);
+  }
+  .scan-field input:focus { border-color:var(--accent); }
+  .scan-field input::placeholder { color:var(--text-dim); }
+
+  .scan-field select {
+    width:100%; padding:10px 14px;
+    background:var(--surface-1); border:1px solid var(--border);
+    border-radius:var(--radius-sm); color:var(--text);
+    font-family:var(--mono); font-size:14px;
+    outline:none; cursor:pointer;
+    transition:border-color var(--transition-fast);
+    appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 14px center;
+    padding-right:36px;
+  }
+  .scan-field select:focus { border-color:var(--accent); }
+
+  .scan-btn {
+    padding:10px 28px; border-radius:var(--radius-sm);
+    font-family:var(--sans); font-size:14px; font-weight:600;
+    background:var(--accent); color:white; border:none;
+    cursor:pointer; transition:all 0.15s;
+    white-space:nowrap;
+  }
+  .scan-btn:hover { background:#5c9aff; }
+  .scan-btn:disabled { background:var(--surface-2); color:var(--text-dim); cursor:not-allowed; }
+  .scan-btn-stop {
+    padding:10px 28px; border-radius:var(--radius-sm);
+    font-family:var(--sans); font-size:14px; font-weight:600;
+    background:var(--surface-2); color:var(--red); border:1px solid #450a0a;
+    cursor:pointer; transition:all 0.15s;
+  }
+  .scan-btn-stop:hover { background:#1c1012; }
+
+  /* Results area */
+  .results-area {
+    flex:1; overflow-y:auto; padding:24px 40px;
+    display:flex; flex-direction:column; gap:16px;
+  }
+
+  /* Status bar */
+  .scan-status {
+    display:flex; align-items:center; gap:12px;
+    padding:12px 16px; border-radius:var(--radius-sm);
+    background:var(--surface-1); border:1px solid var(--border-subtle);
+    font-size:13px; flex-shrink:0;
+  }
+  .scan-status .dot {
+    width:8px; height:8px; border-radius:50%;
+  }
+  .scan-status .dot.idle { background:var(--text-dim); }
+  .scan-status .dot.running { background:var(--accent); box-shadow:0 0 8px rgba(77,142,255,0.5); animation:pulse 2s infinite; }
+  .scan-status .dot.done { background:var(--green); box-shadow:0 0 8px rgba(52,210,123,0.4); }
+  .scan-status .dot.error { background:var(--red); }
+  .scan-status-text { flex:1; color:var(--text-secondary); }
+  .scan-status-meta { font-family:var(--mono); font-size:12px; color:var(--text-dim); }
+
+  /* File ranking */
+  .ranked-files {
+    display:flex; flex-wrap:wrap; gap:6px;
+    margin-bottom:8px;
+  }
+  .ranked-file {
+    padding:4px 10px; border-radius:4px;
+    font-family:var(--mono); font-size:11px;
+    background:var(--surface-2); color:var(--text-dim);
+    border:1px solid var(--border-subtle);
+    transition:all var(--transition-fast);
+  }
+  .ranked-file.analyzing {
+    border-color:var(--accent);
+    color:var(--accent);
+    background:var(--accent-surface);
+  }
+  .ranked-file.done {
+    border-color:var(--green);
+    color:var(--green);
+    background:var(--green-surface);
+  }
+
+  /* Decision cards */
+  .decision-stream { display:flex; flex-direction:column; gap:12px; }
+
+  .scan-decision {
+    background:var(--surface-1);
+    border:1px solid var(--border-subtle);
+    border-radius:var(--radius);
+    padding:16px 20px;
+    animation:cardIn 0.3s ease-out;
+    transition:border-color var(--transition-fast);
+  }
+  .scan-decision:hover { border-color:var(--border); }
+
+  .scan-decision-header {
+    display:flex; align-items:center; gap:10px;
+    margin-bottom:8px;
+  }
+  .scan-decision-file {
+    font-family:var(--mono); font-size:11px;
+    color:var(--text-dim);
+  }
+  .scan-decision-fn {
+    font-family:var(--mono); font-size:12px;
+    font-weight:600; color:var(--accent);
+  }
+  .scan-decision-type {
+    margin-left:auto;
+    font-family:var(--mono); font-size:10px;
+    font-weight:700; text-transform:uppercase;
+    letter-spacing:0.5px;
+    padding:2px 8px; border-radius:3px;
+  }
+  .scan-decision-type.decision { background:var(--accent-surface); color:var(--accent); }
+  .scan-decision-type.suboptimal { background:var(--yellow-surface); color:var(--yellow); }
+  .scan-decision-type.bug { background:var(--red-surface); color:var(--red); }
+
+  .scan-decision-summary {
+    font-size:14px; font-weight:600;
+    line-height:1.5; margin-bottom:6px;
+  }
+  .scan-decision-content {
+    font-size:13px; color:var(--text-secondary);
+    line-height:1.7; margin-bottom:8px;
+  }
+  .scan-decision-critique {
+    font-size:12px; color:var(--yellow);
+    padding:8px 12px; border-radius:var(--radius-sm);
+    background:var(--yellow-surface);
+    line-height:1.5; margin-bottom:8px;
+  }
+  .scan-decision-keywords {
+    display:flex; gap:6px; flex-wrap:wrap;
+  }
+  .scan-kw {
+    font-family:var(--mono); font-size:10px;
+    padding:2px 8px; border-radius:3px;
+    background:var(--surface-2); color:var(--text-dim);
+  }
+
+  /* Empty state */
+  .empty-state {
+    text-align:center; padding:80px 20px;
+    color:var(--text-dim);
+  }
+  .empty-state h3 {
+    font-size:16px; font-weight:600;
+    color:var(--text-secondary); margin-bottom:8px;
+  }
+  .empty-state p { font-size:13px; line-height:1.6; }
+
+  /* Log toggle */
+  .log-toggle {
+    font-size:12px; color:var(--text-dim);
+    cursor:pointer; text-decoration:underline;
+    background:none; border:none; padding:0;
+    font-family:var(--sans);
+  }
+  .log-toggle:hover { color:var(--text); }
+  .log-area {
+    display:none; margin-top:12px;
+    background:var(--surface-0); border:1px solid var(--border-subtle);
+    border-radius:var(--radius-sm);
+    padding:12px 16px;
+    font-family:var(--mono); font-size:11px;
+    line-height:1.7; max-height:300px;
+    overflow-y:auto; color:var(--text-dim);
+    white-space:pre-wrap;
+  }
+  .log-area.open { display:block; }
+
+  /* AI config bar */
+  .ai-bar {
+    padding: 12px 40px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--surface-0);
+    flex-shrink: 0;
+  }
+  .ai-bar label {
+    font-size:11px; font-weight:700; color:var(--text-dim);
+    text-transform:uppercase; letter-spacing:0.5px;
+  }
+  .ai-bar select, .ai-bar input {
+    padding:6px 10px; font-size:12px;
+    background:var(--surface-2); border:1px solid var(--border);
+    border-radius:var(--radius-sm); color:var(--text);
+    font-family:var(--mono); outline:none;
+  }
+  .ai-bar select { min-width:160px; cursor:pointer; }
+  .ai-bar input { min-width:180px; }
+  .ai-bar .ai-save-btn {
+    padding:5px 14px; font-size:12px; font-weight:600;
+    background:var(--surface-2); color:var(--text-dim);
+    border:1px solid var(--border); border-radius:var(--radius-sm);
+    cursor:pointer; transition:all 0.15s;
+    font-family:var(--sans);
+  }
+  .ai-bar .ai-save-btn:hover { color:var(--text); border-color:var(--accent); }
+  .ai-bar .ai-msg { font-size:11px; color:var(--green); transition:opacity 0.3s; }
+  .ai-toggle {
+    font-size:11px; color:var(--text-dim); cursor:pointer;
+    background:none; border:none; padding:0; font-family:var(--sans);
+    text-decoration:underline;
+  }
+  .ai-toggle:hover { color:var(--text); }
+</style>
+</head>
+<body>
+
+<nav class="sidebar" id="sidebar"></nav>
+<script src="/sidebar.js"></script>
+
+<div class="main">
+  <div class="scan-hero">
+    <h2>Quick Scan</h2>
+    <p>Select a repo and hit Scan. We use the code graph (CPG + Memgraph) to find the most important files, then deep-analyze them to extract design decisions. No goal or business context needed.</p>
+  </div>
+
+  <div class="ai-bar" id="aiBar">
+    <label>AI</label>
+    <select id="aiProvider" onchange="toggleApiKey()">
+      <option value="claude-cli">Claude CLI (subscription)</option>
+      <option value="anthropic-api">Anthropic API (key)</option>
+    </select>
+    <div id="apiKeyGroup" style="display:none">
+      <input id="aiApiKey" type="password" placeholder="sk-ant-...">
+    </div>
+    <input id="aiModel" type="text" placeholder="model (auto)" style="min-width:140px">
+    <button class="ai-save-btn" onclick="saveAI()">Save</button>
+    <span class="ai-msg" id="aiMsg"></span>
+  </div>
+
+  <div class="scan-input-area">
+    <div class="scan-field" style="flex:2">
+      <label>Repo</label>
+      <select id="repoSelect">
+        <option value="">-- Select a repo --</option>
+      </select>
+    </div>
+    <button class="scan-btn" id="startBtn" onclick="startScan()">Scan</button>
+    <button class="scan-btn-stop" id="stopBtn" onclick="stopScan()" style="display:none">Stop</button>
+  </div>
+
+  <!-- Preflight checks -->
+  <div id="preflightArea" style="padding:24px 40px">
+    <div style="font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px">Setup checklist</div>
+    <div id="preflightChecks" style="display:flex;flex-direction:column;gap:8px"></div>
+  </div>
+
+  <div class="results-area" id="resultsArea" style="display:none">
+  </div>
+</div>
+
+<script>
+const startBtn = document.getElementById('startBtn')
+const stopBtn = document.getElementById('stopBtn')
+const resultsArea = document.getElementById('resultsArea')
+const preflightArea = document.getElementById('preflightArea')
+const preflightChecks = document.getElementById('preflightChecks')
+
+let scanReady = false
+
+// ── Preflight checks ────────────────────
+function checkIcon(ok) {
+  return '<div style="width:8px;height:8px;border-radius:50%;flex-shrink:0;background:' +
+    (ok ? 'var(--green);box-shadow:0 0 6px rgba(52,210,123,0.4)' : 'var(--red);box-shadow:0 0 6px rgba(240,86,86,0.4)') + '"></div>'
+}
+
+function checkRow(ok, label, detail, action) {
+  return '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface-1);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);font-size:13px">'
+    + checkIcon(ok)
+    + '<span style="flex:1;color:var(--text-secondary)">' + label + '</span>'
+    + '<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:' + (ok ? 'var(--green)' : 'var(--red)') + '">' + detail + '</span>'
+    + (action ? '<a href="' + action.href + '" style="font-size:11px;color:var(--accent);text-decoration:none;margin-left:8px">' + action.text + '</a>' : '')
+    + '</div>'
+}
+
+async function runPreflight() {
+  preflightChecks.innerHTML = '<div style="color:var(--text-dim);font-size:13px">Checking...</div>'
+  try {
+    const pf = await fetch('/api/scan/preflight').then(r => r.json())
+
+    let html = ''
+    // 1. Memgraph
+    html += checkRow(pf.memgraph, 'Memgraph', pf.memgraph ? 'Connected' : 'Not running — run: docker compose up -d', null)
+
+    // 2. Repos configured
+    const hasRepos = pf.repos.length > 0
+    html += checkRow(hasRepos, 'Repos configured', hasRepos ? pf.repos.length + ' repos' : 'None', { href: '/system', text: 'Add repo' })
+
+    // 3. CPG files
+    const allCpg = pf.repos.length > 0 && pf.repos.every(r => r.cpgExists)
+    const anyCpg = pf.repos.some(r => r.cpgExists)
+    if (hasRepos) {
+      html += checkRow(allCpg, 'CPG files generated',
+        allCpg ? 'All ready' : pf.repos.filter(r => !r.cpgExists).map(r => r.name).join(', ') + ' missing',
+        null)
+    }
+
+    // 4. Data ingested
+    html += checkRow(pf.hasData, 'Data ingested into Memgraph', pf.hasData ? 'Ready' : 'Run Full Setup', { href: '/system', text: 'System' })
+
+    preflightChecks.innerHTML = html
+    scanReady = pf.memgraph && hasRepos && pf.hasData
+
+    // Populate repo dropdown
+    repoSelect.innerHTML = '<option value="">-- Select a repo --</option>'
+    if (hasRepos) {
+      for (const r of pf.repos) {
+        const opt = document.createElement('option')
+        opt.value = r.name
+        opt.textContent = r.name + ' (' + r.type + ')'
+        repoSelect.appendChild(opt)
+      }
+    }
+
+    startBtn.disabled = !scanReady
+    if (!scanReady) {
+      startBtn.title = 'Complete the setup checklist first'
+    }
+  } catch (e) {
+    preflightChecks.innerHTML = '<div style="color:var(--red);font-size:13px">Failed to check: ' + esc(e.message) + '</div>'
+  }
+}
+
+runPreflight()
+
+let eventSource = null
+let statusEl = null
+let fileChipsEl = null
+let decisionsEl = null
+let logArea = null
+let decisionCount = 0
+let startTime = 0
+let timerInterval = null
+
+function esc(s) { return !s ? '' : String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+function setRunning(running) {
+  startBtn.style.display = running ? 'none' : 'inline-flex'
+  stopBtn.style.display = running ? 'inline-flex' : 'none'
+  repoSelect.disabled = running
+  if (!running) preflightArea.style.display = ''
+}
+
+function updateStatusText(text) {
+  if (statusEl) {
+    statusEl.querySelector('.scan-status-text').textContent = text
+  }
+}
+
+function updateStatusDot(state) {
+  if (statusEl) {
+    const dot = statusEl.querySelector('.dot')
+    dot.className = 'dot ' + state
+  }
+}
+
+function updateTimer() {
+  if (!statusEl) return
+  const sec = Math.floor((Date.now() - startTime) / 1000)
+  const min = Math.floor(sec / 60)
+  statusEl.querySelector('.scan-status-meta').textContent =
+    (min > 0 ? min + 'm ' + (sec % 60) + 's' : sec + 's') +
+    (decisionCount > 0 ? ' | ' + decisionCount + ' decisions' : '')
+}
+
+function markFileChip(fileName, state) {
+  if (!fileChipsEl) return
+  const chips = fileChipsEl.querySelectorAll('.ranked-file')
+  for (const chip of chips) {
+    if (chip.textContent.trim() === fileName || chip.dataset.path === fileName) {
+      chip.className = 'ranked-file ' + state
+    }
+  }
+}
+
+function addDecisionCard(d) {
+  if (!decisionsEl) return
+  const typeClass = d.finding_type || 'decision'
+  const critiqueHtml = d.critique
+    ? '<div class="scan-decision-critique">' + esc(d.critique) + '</div>'
+    : ''
+  const kwHtml = (d.keywords || []).map(function(k) {
+    return '<span class="scan-kw">' + esc(k) + '</span>'
+  }).join('')
+
+  const card = document.createElement('div')
+  card.className = 'scan-decision'
+  card.innerHTML =
+    '<div class="scan-decision-header">' +
+      '<span class="scan-decision-file">' + esc(d.file) + '</span>' +
+      (d.function ? '<span class="scan-decision-fn">' + esc(d.function) + '</span>' : '') +
+      '<span class="scan-decision-type ' + typeClass + '">' + esc(d.finding_type || 'decision') + '</span>' +
+    '</div>' +
+    '<div class="scan-decision-summary">' + esc(d.summary) + '</div>' +
+    '<div class="scan-decision-content">' + esc(d.content) + '</div>' +
+    critiqueHtml +
+    '<div class="scan-decision-keywords">' + kwHtml + '</div>'
+
+  decisionsEl.appendChild(card)
+  // Scroll to bottom
+  resultsArea.scrollTop = resultsArea.scrollHeight
+}
+
+function appendLog(text) {
+  if (logArea) {
+    logArea.textContent += text + '\n'
+    logArea.scrollTop = logArea.scrollHeight
+  }
+}
+
+function initResultsUI() {
+  preflightArea.style.display = 'none'
+  resultsArea.style.display = ''
+  decisionCount = 0
+
+  resultsArea.innerHTML =
+    '<div class="scan-status" id="scanStatus">' +
+      '<div class="dot running"></div>' +
+      '<span class="scan-status-text">Starting scan...</span>' +
+      '<span class="scan-status-meta">0s</span>' +
+    '</div>' +
+    '<div class="ranked-files" id="fileChips"></div>' +
+    '<div class="decision-stream" id="decisionStream"></div>' +
+    '<button class="log-toggle" onclick="toggleLog()">Show raw log</button>' +
+    '<div class="log-area" id="logArea"></div>'
+
+  statusEl = document.getElementById('scanStatus')
+  fileChipsEl = document.getElementById('fileChips')
+  decisionsEl = document.getElementById('decisionStream')
+  logArea = document.getElementById('logArea')
+}
+
+function toggleLog() {
+  if (logArea) logArea.classList.toggle('open')
+}
+
+async function startScan() {
+  const repo = repoSelect.value
+  if (!repo) { repoSelect.focus(); return }
+  if (!scanReady) { alert('Complete the setup checklist first'); return }
+
+  initResultsUI()
+  setRunning(true)
+  startTime = Date.now()
+  timerInterval = setInterval(updateTimer, 1000)
+
+  try {
+    const res = await fetch('/api/scan/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ repo })
+    })
+    if (!res.ok) {
+      const err = await res.json()
+      updateStatusText('Error: ' + (err.error || 'Failed'))
+      updateStatusDot('error')
+      setRunning(false)
+      clearInterval(timerInterval)
+      return
+    }
+
+    // Connect to SSE stream
+    if (eventSource) eventSource.close()
+    eventSource = new EventSource('/api/scan/stream')
+
+    eventSource.addEventListener('log', function(e) {
+      const text = e.data
+      appendLog(text)
+
+      // Parse file ranking
+      if (text.startsWith('  >> ')) {
+        const fileName = text.replace('  >> ', '').split(' (')[0]
+        const chip = document.createElement('span')
+        chip.className = 'ranked-file'
+        chip.textContent = fileName.split('/').pop()
+        chip.dataset.path = fileName
+        chip.title = fileName
+        if (fileChipsEl) fileChipsEl.appendChild(chip)
+      }
+
+      // Parse decision
+      if (text.startsWith('DECISION::')) {
+        try {
+          const d = JSON.parse(text.slice('DECISION::'.length))
+          decisionCount++
+          addDecisionCard(d)
+          markFileChip(d.file, 'done')
+        } catch {}
+      }
+
+      // Parse progress
+      const progressMatch = text.match(/\[(\d+)\/(\d+)\]\s+(.+?)(?:\s+—|$)/)
+      if (progressMatch) {
+        const current = progressMatch[1]
+        const total = progressMatch[2]
+        const file = progressMatch[3]
+        updateStatusText('Analyzing ' + current + '/' + total + ': ' + file)
+        markFileChip(file, 'analyzing')
+      }
+
+      // Phase updates
+      if (text.includes('Ranking files')) {
+        updateStatusText('Ranking files by importance...')
+      }
+      if (text.includes('Selected top')) {
+        updateStatusText(text.trim())
+      }
+      if (text.includes('Starting deep')) {
+        updateStatusText('Deep analyzing top files...')
+      }
+      if (text.startsWith('Found ')) {
+        updateStatusText(text.trim())
+      }
+    })
+
+    eventSource.addEventListener('status', function(e) {
+      const status = e.data
+      clearInterval(timerInterval)
+      updateTimer()
+      if (status === 'done') {
+        updateStatusDot('done')
+        updateStatusText('Complete — ' + decisionCount + ' decisions found')
+      } else {
+        updateStatusDot('error')
+        updateStatusText('Scan failed')
+      }
+      setRunning(false)
+      eventSource.close()
+      eventSource = null
+    })
+
+    eventSource.onerror = function() {
+      updateStatusDot('error')
+      updateStatusText('Connection lost')
+      setRunning(false)
+      clearInterval(timerInterval)
+      eventSource.close()
+      eventSource = null
+    }
+
+  } catch (err) {
+    updateStatusText('Error: ' + err.message)
+    updateStatusDot('error')
+    setRunning(false)
+    clearInterval(timerInterval)
+  }
+}
+
+async function stopScan() {
+  try {
+    await fetch('/api/scan/stop', { method: 'POST' })
+  } catch {}
+  setRunning(false)
+  clearInterval(timerInterval)
+  updateStatusDot('idle')
+  updateStatusText('Stopped')
+  if (eventSource) { eventSource.close(); eventSource = null }
+}
+
+// Check if scan is already running
+fetch('/api/scan/status').then(r => r.json()).then(data => {
+  if (data.status === 'running') {
+    repoSelect.value = data.repo || ''
+    initResultsUI()
+    setRunning(true)
+    startTime = data.startedAt || Date.now()
+    timerInterval = setInterval(updateTimer, 1000)
+
+    eventSource = new EventSource('/api/scan/stream')
+    eventSource.addEventListener('log', function(e) {
+      const text = e.data
+      appendLog(text)
+      if (text.startsWith('DECISION::')) {
+        try { decisionCount++; addDecisionCard(JSON.parse(text.slice('DECISION::'.length))) } catch {}
+      }
+    })
+    eventSource.addEventListener('status', function(e) {
+      clearInterval(timerInterval); updateTimer()
+      updateStatusDot(e.data === 'done' ? 'done' : 'error')
+      updateStatusText(e.data === 'done' ? 'Complete — ' + decisionCount + ' decisions found' : 'Failed')
+      setRunning(false); eventSource.close(); eventSource = null
+    })
+  }
+}).catch(function() {})
+
+// ── AI Config ──────────────────────────
+function toggleApiKey() {
+  document.getElementById('apiKeyGroup').style.display =
+    document.getElementById('aiProvider').value === 'anthropic-api' ? '' : 'none'
+}
+
+function loadAIConfig() {
+  fetch('/api/pipeline/ai-config').then(r => r.json()).then(data => {
+    document.getElementById('aiProvider').value = data.provider || 'claude-cli'
+    document.getElementById('aiModel').value = data.model || ''
+    if (data.apiKey) document.getElementById('aiApiKey').value = '********'
+    toggleApiKey()
+  }).catch(() => {})
+}
+
+async function saveAI() {
+  const body = { provider: document.getElementById('aiProvider').value }
+  const model = document.getElementById('aiModel').value.trim()
+  const apiKey = document.getElementById('aiApiKey').value.trim()
+  if (model) body.model = model
+  if (apiKey && apiKey !== '********') body.apiKey = apiKey
+
+  try {
+    await fetch('/api/pipeline/ai-config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+    const msg = document.getElementById('aiMsg')
+    msg.textContent = 'Saved'
+    setTimeout(() => { msg.textContent = '' }, 2000)
+  } catch {}
+}
+
+loadAIConfig()
+</script>
+</body>
+</html>

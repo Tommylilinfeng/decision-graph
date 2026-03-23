@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CKG — Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<style>
+  .main { display:flex; flex-direction:column; height:100vh; overflow-y:auto; }
+
+  .content { padding: 24px; display: flex; flex-direction: column; gap: 24px; }
+
+  /* ── AI Config Bar ───────────────── */
+  .ai-config {
+    background: var(--surface-0); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .ai-config label { font-size: 12px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .ai-config select, .ai-config input {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px;
+    color: var(--text); font-family: var(--mono); font-size: 12px; padding: 6px 10px;
+  }
+  .ai-config select { min-width: 140px; }
+  .ai-config input { min-width: 200px; }
+  .ai-config .ai-save {
+    margin-left: auto; background: var(--accent); border: none; color: #fff;
+    padding: 6px 14px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer;
+  }
+  .ai-config .ai-save:hover { background: var(--accent-hover); }
+  .ai-config .ai-status { font-size: 11px; color: var(--green); opacity: 0; transition: opacity 0.3s; }
+  .ai-config .ai-status.show { opacity: 1; }
+
+  /* ── Pipeline Flow ───────────────── */
+  .pipeline-section h3 { font-size: 13px; font-weight: 600; color: var(--text-dim); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .pipeline-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+  .pipeline-tab {
+    padding: 7px 16px; border-radius: 6px; font-size: 13px; font-weight: 600;
+    background: var(--surface-0); border: 1px solid var(--border); color: var(--text-dim);
+    cursor: pointer; transition: all 0.12s;
+  }
+  .pipeline-tab:hover { border-color: var(--text-dim); color: var(--text); }
+  .pipeline-tab.active { border-color: var(--accent); color: var(--accent); background: var(--surface-2); }
+  .pipeline-tab .tab-badge {
+    font-size: 10px; margin-left: 6px; padding: 1px 6px; border-radius: 3px;
+    background: var(--surface-3); color: var(--text-dim);
+  }
+  .pipeline-tab.active .tab-badge { background: #1e3a5f; color: var(--accent); }
+  .pipeline-tab .draft-badge {
+    font-size: 9px; margin-left: 6px; padding: 1px 5px; border-radius: 3px;
+    background: #332800; color: var(--yellow); text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .pipeline-desc {
+    font-size: 12px; color: var(--text-dim); margin-bottom: 16px; line-height: 1.5;
+  }
+
+  .pipeline-flow {
+    display: flex; align-items: center; gap: 0; overflow-x: auto; padding: 8px 0;
+  }
+  .round-card {
+    flex-shrink: 0; width: 160px; background: var(--surface-0); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px; cursor: pointer; transition: all 0.15s; position: relative;
+  }
+  .round-card:hover { border-color: var(--accent); background: var(--surface-2); }
+  .round-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .round-card.has-custom::after {
+    content: ''; position: absolute; top: 8px; right: 8px; font-size: 11px;
+  }
+  .round-card .round-name { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+  .round-card .round-desc { font-size: 11px; color: var(--text-dim); line-height: 1.4; margin-bottom: 8px; min-height: 30px; }
+  .round-card .round-meta { font-family: var(--mono); font-size: 10px; color: var(--purple); }
+
+  .arrow {
+    flex-shrink: 0; width: 32px; display: flex; align-items: center; justify-content: center;
+    color: var(--text-dim); font-size: 16px;
+  }
+
+  /* ── Editor Panel ────────────────── */
+  .editor-panel {
+    background: var(--surface-0); border: 1px solid var(--border); border-radius: 8px;
+    display: none;
+  }
+  .editor-panel.visible { display: block; }
+
+  .editor-header {
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .editor-header h3 { font-size: 14px; font-weight: 700; }
+  .editor-header .custom-badge {
+    font-size: 10px; padding: 2px 8px; border-radius: 3px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .editor-header .custom-badge.default { background: var(--surface-2); color: var(--text-dim); }
+  .editor-header .custom-badge.custom { background: #1e3a5f; color: var(--accent); }
+
+  .editor-body { display: grid; grid-template-columns: 220px 1fr; min-height: 400px; }
+
+  .var-panel {
+    border-right: 1px solid var(--border); padding: 16px;
+    overflow-y: auto; max-height: 500px;
+  }
+  .var-panel h4 { font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+  .var-item { margin-bottom: 10px; }
+  .var-item code {
+    font-family: var(--mono); font-size: 12px; color: var(--orange);
+    background: var(--surface-2); padding: 1px 5px; border-radius: 3px;
+  }
+  .var-item p { font-size: 11px; color: var(--text-dim); margin-top: 2px; line-height: 1.4; }
+
+  .template-panel { padding: 16px; display: flex; flex-direction: column; }
+  .template-panel textarea {
+    flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-family: var(--mono); font-size: 12px; line-height: 1.6;
+    padding: 14px; resize: vertical; min-height: 350px; tab-size: 2;
+  }
+  .template-panel textarea:focus { outline: none; border-color: var(--accent); }
+
+  .editor-actions {
+    padding: 12px 20px; border-top: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .btn {
+    padding: 7px 16px; border-radius: 5px; font-size: 12px; font-weight: 600;
+    cursor: pointer; border: none; transition: all 0.12s;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-danger { background: transparent; border: 1px solid var(--red); color: var(--red); }
+  .btn-danger:hover { background: var(--red); color: #fff; }
+  .btn-secondary { background: var(--surface-2); color: var(--text-dim); border: 1px solid var(--border); }
+  .btn-secondary:hover { color: var(--text); border-color: var(--text-dim); }
+  .save-status { font-size: 11px; color: var(--green); margin-left: auto; opacity: 0; transition: opacity 0.3s; }
+  .save-status.show { opacity: 1; }
+  .char-count { font-family: var(--mono); font-size: 11px; color: var(--text-dim); margin-left: 8px; }
+</style>
+</head>
+<body>
+
+<nav class="sidebar" id="sidebar"></nav>
+<script src="/sidebar.js"></script>
+
+<div class="main">
+  <div class="page-header">
+    <h2>Pipeline Configuration</h2>
+  </div>
+
+  <div class="content">
+
+    <!-- AI Provider Config -->
+    <div class="ai-config">
+      <div>
+        <label>Provider</label><br>
+        <select id="aiProvider">
+          <option value="claude-cli">claude -p (CLI / subscription)</option>
+          <option value="anthropic-api">Anthropic API (key)</option>
+        </select>
+      </div>
+      <div>
+        <label>Model</label><br>
+        <input id="aiModel" type="text" placeholder="default (auto)">
+      </div>
+      <div id="apiKeyGroup" style="display:none">
+        <label>API Key</label><br>
+        <input id="aiApiKey" type="password" placeholder="sk-ant-...">
+      </div>
+      <button class="ai-save" onclick="saveAIConfig()">Save</button>
+      <span class="ai-status" id="aiStatus">✓ Saved</span>
+    </div>
+
+    <!-- Pipeline Selector + Flow -->
+    <div class="pipeline-section">
+      <h3>Pipeline</h3>
+      <div class="pipeline-tabs" id="pipelineTabs"></div>
+      <div class="pipeline-desc" id="pipelineDesc"></div>
+      <div class="pipeline-flow" id="pipelineFlow"></div>
+    </div>
+
+    <!-- Editor Panel -->
+    <div class="editor-panel" id="editorPanel">
+      <div class="editor-header">
+        <h3 id="editorTitle">—</h3>
+        <span class="custom-badge default" id="customBadge">DEFAULT</span>
+      </div>
+      <div class="editor-body">
+        <div class="var-panel" id="varPanel"></div>
+        <div class="template-panel">
+          <textarea id="templateEditor" spellcheck="false"></textarea>
+        </div>
+      </div>
+      <div class="editor-actions">
+        <button class="btn btn-primary" onclick="saveTemplate()">Save Override</button>
+        <button class="btn btn-danger" onclick="resetTemplate()">Reset to Default</button>
+        <button class="btn btn-secondary" onclick="diffView()">Show Diff</button>
+        <span class="char-count" id="charCount">0 chars</span>
+        <span class="save-status" id="saveStatus">✓ Saved</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  let pipelines = []
+  let selectedPipeline = null
+  let rounds = []
+  let selectedRound = null
+  let currentDefault = ''
+
+  // ── AI Config ──
+  fetch('/api/pipeline/ai-config').then(r => r.json()).then(data => {
+    document.getElementById('aiProvider').value = data.provider || 'claude-cli'
+    document.getElementById('aiModel').value = data.model || ''
+    document.getElementById('aiApiKey').value = data.apiKey || ''
+    toggleApiKey()
+  }).catch(() => {})
+
+  document.getElementById('aiProvider').addEventListener('change', toggleApiKey)
+
+  function toggleApiKey() {
+    const show = document.getElementById('aiProvider').value === 'anthropic-api'
+    document.getElementById('apiKeyGroup').style.display = show ? 'block' : 'none'
+  }
+
+  async function saveAIConfig() {
+    const body = {
+      provider: document.getElementById('aiProvider').value,
+      model: document.getElementById('aiModel').value || undefined,
+      apiKey: document.getElementById('aiApiKey').value || undefined,
+    }
+    try {
+      await fetch('/api/pipeline/ai-config', {
+        method: 'PUT', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body),
+      })
+      flash('aiStatus')
+    } catch {}
+  }
+
+  function flash(id) {
+    const el = document.getElementById(id)
+    el.classList.add('show')
+    setTimeout(() => el.classList.remove('show'), 2000)
+  }
+
+  // ── Load Pipelines ──
+  fetch('/api/pipelines').then(r => r.json()).then(data => {
+    pipelines = data
+    renderPipelineTabs()
+    if (pipelines.length > 0) selectPipeline(pipelines[0].id)
+  }).catch(() => {})
+
+  function renderPipelineTabs() {
+    const tabs = document.getElementById('pipelineTabs')
+    tabs.innerHTML = ''
+    pipelines.forEach(p => {
+      const tab = document.createElement('div')
+      tab.className = 'pipeline-tab' + (selectedPipeline === p.id ? ' active' : '')
+      let badges = ''
+      if (p.customCount > 0) badges += `<span class="tab-badge">${p.customCount} custom</span>`
+      if (p.status === 'draft') badges += '<span class="draft-badge">draft</span>'
+      tab.innerHTML = `${p.name}${badges}`
+      tab.onclick = () => selectPipeline(p.id)
+      tabs.appendChild(tab)
+    })
+  }
+
+  async function selectPipeline(pipelineId) {
+    selectedPipeline = pipelineId
+    selectedRound = null
+    document.getElementById('editorPanel').classList.remove('visible')
+    renderPipelineTabs()
+
+    const p = pipelines.find(x => x.id === pipelineId)
+    document.getElementById('pipelineDesc').textContent = p ? p.description : ''
+
+    const res = await fetch(`/api/pipeline/${pipelineId}/rounds`)
+    rounds = await res.json()
+    renderRounds()
+  }
+
+  function renderRounds() {
+    const flow = document.getElementById('pipelineFlow')
+    flow.innerHTML = ''
+    rounds.forEach((r, i) => {
+      if (i > 0) {
+        const arrow = document.createElement('div')
+        arrow.className = 'arrow'
+        arrow.textContent = '→'
+        flow.appendChild(arrow)
+      }
+      const card = document.createElement('div')
+      card.className = 'round-card' + (r.isCustom ? ' has-custom' : '') + (selectedRound === r.id ? ' selected' : '')
+      card.innerHTML = `
+        <div class="round-name">${r.shortName}</div>
+        <div class="round-desc">${r.description.length > 60 ? r.description.slice(0, 57) + '...' : r.description}</div>
+        <div class="round-meta">${r.aiCalls}</div>
+      `
+      card.onclick = () => selectRound(r.id)
+      flow.appendChild(card)
+    })
+  }
+
+  async function selectRound(roundId) {
+    selectedRound = roundId
+    renderRounds()
+
+    const res = await fetch(`/api/pipeline/${selectedPipeline}/prompt/${roundId}`)
+    const data = await res.json()
+    const round = rounds.find(r => r.id === roundId)
+
+    document.getElementById('editorTitle').textContent = round.name
+    const badge = document.getElementById('customBadge')
+    badge.textContent = data.isCustom ? 'CUSTOM' : 'DEFAULT'
+    badge.className = 'custom-badge ' + (data.isCustom ? 'custom' : 'default')
+
+    const varPanel = document.getElementById('varPanel')
+    varPanel.innerHTML = '<h4>Available Variables</h4>' +
+      data.variables.map(v =>
+        `<div class="var-item"><code>{{${v.name}}}</code><p>${v.description}</p></div>`
+      ).join('')
+
+    document.getElementById('templateEditor').value = data.template
+    currentDefault = data.defaultTemplate
+    updateCharCount()
+
+    document.getElementById('editorPanel').classList.add('visible')
+  }
+
+  document.getElementById('templateEditor').addEventListener('input', updateCharCount)
+
+  function updateCharCount() {
+    const len = document.getElementById('templateEditor').value.length
+    document.getElementById('charCount').textContent = len.toLocaleString() + ' chars'
+  }
+
+  async function saveTemplate() {
+    if (!selectedPipeline || !selectedRound) return
+    const template = document.getElementById('templateEditor').value
+    try {
+      await fetch(`/api/pipeline/${selectedPipeline}/prompt/${selectedRound}`, {
+        method: 'PUT', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ template }),
+      })
+      flash('saveStatus')
+      // Refresh
+      const pRes = await fetch('/api/pipelines')
+      pipelines = await pRes.json()
+      renderPipelineTabs()
+      const rRes = await fetch(`/api/pipeline/${selectedPipeline}/rounds`)
+      rounds = await rRes.json()
+      renderRounds()
+      const badge = document.getElementById('customBadge')
+      badge.textContent = 'CUSTOM'
+      badge.className = 'custom-badge custom'
+    } catch {}
+  }
+
+  async function resetTemplate() {
+    if (!selectedPipeline || !selectedRound) return
+    if (!confirm('Reset this prompt to the default template? Your custom version will be deleted.')) return
+    try {
+      await fetch(`/api/pipeline/${selectedPipeline}/prompt/${selectedRound}`, { method: 'DELETE' })
+      const pRes = await fetch('/api/pipelines')
+      pipelines = await pRes.json()
+      renderPipelineTabs()
+      const rRes = await fetch(`/api/pipeline/${selectedPipeline}/rounds`)
+      rounds = await rRes.json()
+      renderRounds()
+      selectRound(selectedRound)
+    } catch {}
+  }
+
+  function diffView() {
+    const current = document.getElementById('templateEditor').value
+    if (current === currentDefault) {
+      alert('No differences — template matches the default.')
+      return
+    }
+    const diffWin = window.open('', '_blank', 'width=900,height=700')
+    diffWin.document.write(`<!DOCTYPE html><html><head><title>Diff: ${selectedRound}</title>
+      <style>
+        body{background:#0c0e11;color:#e0e4ec;font-family:'JetBrains Mono',monospace;font-size:12px;margin:0;display:flex;}
+        .pane{flex:1;padding:16px;overflow:auto;white-space:pre-wrap;word-break:break-all;line-height:1.6;}
+        .pane:first-child{border-right:1px solid #2a2f3a;}
+        h3{font-size:13px;color:#6b7280;margin-bottom:12px;font-family:'DM Sans',sans-serif;}
+      </style></head><body>
+      <div class="pane"><h3>DEFAULT</h3>${escHtml(currentDefault)}</div>
+      <div class="pane"><h3>CURRENT</h3>${escHtml(current)}</div>
+    </body></html>`)
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  }
+
+  document.getElementById('templateEditor').addEventListener('keydown', (e) => {
+    if (e.key === 'Tab') {
+      e.preventDefault()
+      const ta = e.target
+      const start = ta.selectionStart
+      ta.value = ta.value.substring(0, start) + '  ' + ta.value.substring(ta.selectionEnd)
+      ta.selectionStart = ta.selectionEnd = start + 2
+    }
+  })
+</script>
+</body>
+</html>

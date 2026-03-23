@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CKG — Decision Relationships</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<style>
+.main { display: flex; flex-direction: column; }
+
+/* ── Stats Bar ──────────────────────────────────── */
+.stats-bar {
+  display: flex;
+  gap: 2px;
+  padding: 0 40px;
+  margin-top: 20px;
+}
+.stat-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 100px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--mono);
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  transition: all var(--transition-fast);
+  cursor: default;
+}
+.stat-pill .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.stat-pill .count { font-size: 14px; font-weight: 700; }
+.stat-pill .label { font-family: var(--sans); font-weight: 500; color: var(--text-secondary); font-size: 12px; }
+
+/* ── Legend Bar ──────────────────────────────────── */
+.legend-bar {
+  display: flex;
+  gap: 20px;
+  padding: 14px 40px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-0);
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--text-secondary);
+}
+.legend-line {
+  width: 24px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+/* ── Graph Container ────────────────────────────── */
+.graph-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+.graph-container svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ── Empty State ────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 400px;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 40px;
+}
+.empty-state .empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.4;
+}
+.empty-state h3 {
+  font-family: var(--sans);
+  font-size: 22px;
+  font-weight: 400;
+
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.empty-state p {
+  font-size: 13px;
+  max-width: 360px;
+  line-height: 1.6;
+}
+
+/* ── Detail Panel ───────────────────────────────── */
+.detail-panel {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 340px;
+  max-height: calc(100% - 40px);
+  overflow-y: auto;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 20px;
+  display: none;
+  z-index: 10;
+}
+.detail-panel.visible { display: block; }
+.detail-panel .panel-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all var(--transition-fast);
+}
+.detail-panel .panel-close:hover { color: var(--text); background: var(--surface-2); }
+.detail-panel h3 {
+  font-family: var(--sans);
+  font-size: 18px;
+  font-weight: 400;
+
+  margin-bottom: 12px;
+  padding-right: 24px;
+  line-height: 1.4;
+}
+.detail-panel .panel-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 100px;
+  font-size: 11px;
+  font-family: var(--mono);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+.detail-panel .panel-badge.decision { background: var(--accent-surface); color: var(--accent); }
+.detail-panel .panel-badge.bug { background: var(--red-surface); color: var(--red); }
+.detail-panel .panel-badge.suboptimal { background: var(--yellow-surface); color: var(--yellow); }
+.detail-panel .panel-section {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+.detail-panel .panel-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  margin-bottom: 8px;
+}
+.detail-panel .keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.detail-panel .keyword-tag {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: var(--mono);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+.detail-panel .edge-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.detail-panel .edge-type {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.detail-panel .edge-target {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.detail-panel .edge-reason {
+  color: var(--text-dim);
+  font-size: 11px;
+
+  line-height: 1.4;
+}
+
+/* ── Node Labels (SVG) ──────────────────────────── */
+.node-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  fill: #949bae;
+  pointer-events: none;
+  user-select: none;
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar" id="sidebar"></nav>
+<script src="/sidebar.js"></script>
+
+<div class="main">
+  <div class="page-hero">
+    <h2>Decision Relationships</h2>
+    <p class="subtitle">Force-directed graph of decision nodes and their relationships</p>
+    <div class="stats-bar">
+      <div class="stat-pill">
+        <div class="dot" style="background:var(--accent)"></div>
+        <span class="count" id="nodeCount">0</span>
+        <span class="label">nodes</span>
+      </div>
+      <div class="stat-pill">
+        <div class="dot" style="background:var(--purple)"></div>
+        <span class="count" id="edgeCount">0</span>
+        <span class="label">edges</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend-bar">
+    <div class="legend-item">
+      <div class="legend-line" style="background:#f97316"></div>
+      CAUSED_BY
+    </div>
+    <div class="legend-item">
+      <div class="legend-line" style="background:#4d8eff"></div>
+      DEPENDS_ON
+    </div>
+    <div class="legend-item">
+      <div class="legend-line" style="background:#f05656"></div>
+      CONFLICTS_WITH
+    </div>
+    <div class="legend-item">
+      <div class="legend-line" style="background:#a78bfa"></div>
+      CO_DECIDED
+    </div>
+    <span style="margin-left:auto;display:flex;align-items:center;gap:12px">
+      <div class="legend-item"><div class="dot" style="width:10px;height:10px;border-radius:50%;background:#4d8eff"></div>decision</div>
+      <div class="legend-item"><div class="dot" style="width:10px;height:10px;border-radius:50%;background:#f05656"></div>bug</div>
+      <div class="legend-item"><div class="dot" style="width:10px;height:10px;border-radius:50%;background:#e8b931"></div>suboptimal</div>
+    </span>
+  </div>
+
+  <div class="graph-container" id="graphContainer">
+    <!-- SVG or empty state injected here -->
+    <div class="detail-panel" id="detailPanel">
+      <button class="panel-close" id="panelClose">&times;</button>
+      <h3 id="panelSummary"></h3>
+      <div id="panelBadge" class="panel-badge"></div>
+      <div class="panel-section">
+        <div class="panel-section-title">Keywords</div>
+        <div class="keywords" id="panelKeywords"></div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-section-title">Connected Edges</div>
+        <div id="panelEdges"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const NODE_COLORS = { decision: '#4d8eff', bug: '#f05656', suboptimal: '#e8b931' };
+  const EDGE_COLORS = { CAUSED_BY: '#f97316', DEPENDS_ON: '#4d8eff', CONFLICTS_WITH: '#f05656', CO_DECIDED: '#a78bfa' };
+
+  const container = document.getElementById('graphContainer');
+  const detailPanel = document.getElementById('detailPanel');
+
+  let graphData = { nodes: [], edges: [] };
+  let nodeMap = {};
+
+  document.getElementById('panelClose').addEventListener('click', function() {
+    detailPanel.classList.remove('visible');
+  });
+
+  async function fetchData() {
+    try {
+      const res = await fetch('/api/decisions/relationships');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return await res.json();
+    } catch (e) {
+      console.error('Failed to fetch relationships:', e);
+      return { nodes: [], edges: [] };
+    }
+  }
+
+  function showEmptyState() {
+    var div = document.createElement('div');
+    div.className = 'empty-state';
+    div.innerHTML = '<div class="empty-icon">&#x1F578;</div>' +
+      '<h3>No decision relationships found</h3>' +
+      '<p>Run a pipeline with relationship extraction to populate this graph.</p>';
+    container.insertBefore(div, detailPanel);
+  }
+
+  function truncate(str, len) {
+    if (!str) return '';
+    return str.length > len ? str.substring(0, len) + '...' : str;
+  }
+
+  /* ── Force Simulation ────────────────────────── */
+  function runSimulation(nodes, edges, width, height) {
+    var n = nodes.length;
+    // Initialize positions in a circle
+    for (var i = 0; i < n; i++) {
+      var angle = (2 * Math.PI * i) / n;
+      var r = Math.min(width, height) * 0.3;
+      nodes[i].x = width / 2 + r * Math.cos(angle);
+      nodes[i].y = height / 2 + r * Math.sin(angle);
+      nodes[i].vx = 0;
+      nodes[i].vy = 0;
+    }
+
+    // Build edge index lookup
+    var edgeIndex = [];
+    for (var e = 0; e < edges.length; e++) {
+      var si = -1, ti = -1;
+      for (var j = 0; j < n; j++) {
+        if (nodes[j].id === edges[e].from) si = j;
+        if (nodes[j].id === edges[e].to) ti = j;
+      }
+      if (si >= 0 && ti >= 0) edgeIndex.push({ s: si, t: ti });
+    }
+
+    var iterations = 300;
+    var repulsion = 3000;
+    var attraction = 0.005;
+    var gravity = 0.02;
+    var damping = 0.9;
+    var cx = width / 2;
+    var cy = height / 2;
+
+    for (var iter = 0; iter < iterations; iter++) {
+      var alpha = 1 - iter / iterations; // cooling
+
+      // Repulsion: all pairs
+      for (var i = 0; i < n; i++) {
+        for (var j = i + 1; j < n; j++) {
+          var dx = nodes[i].x - nodes[j].x;
+          var dy = nodes[i].y - nodes[j].y;
+          var dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          var force = (repulsion * alpha) / (dist * dist);
+          var fx = (dx / dist) * force;
+          var fy = (dy / dist) * force;
+          nodes[i].vx += fx;
+          nodes[i].vy += fy;
+          nodes[j].vx -= fx;
+          nodes[j].vy -= fy;
+        }
+      }
+
+      // Attraction: edges
+      for (var e = 0; e < edgeIndex.length; e++) {
+        var s = edgeIndex[e].s;
+        var t = edgeIndex[e].t;
+        var dx = nodes[t].x - nodes[s].x;
+        var dy = nodes[t].y - nodes[s].y;
+        var dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        var force = dist * attraction * alpha;
+        var fx = (dx / dist) * force;
+        var fy = (dy / dist) * force;
+        nodes[s].vx += fx;
+        nodes[s].vy += fy;
+        nodes[t].vx -= fx;
+        nodes[t].vy -= fy;
+      }
+
+      // Center gravity
+      for (var i = 0; i < n; i++) {
+        nodes[i].vx += (cx - nodes[i].x) * gravity * alpha;
+        nodes[i].vy += (cy - nodes[i].y) * gravity * alpha;
+      }
+
+      // Integrate
+      for (var i = 0; i < n; i++) {
+        nodes[i].vx *= damping;
+        nodes[i].vy *= damping;
+        nodes[i].x += nodes[i].vx;
+        nodes[i].y += nodes[i].vy;
+        // Clamp to bounds with padding
+        nodes[i].x = Math.max(60, Math.min(width - 60, nodes[i].x));
+        nodes[i].y = Math.max(60, Math.min(height - 60, nodes[i].y));
+      }
+    }
+
+    return { nodes: nodes, edgeIndex: edgeIndex };
+  }
+
+  /* ── SVG Rendering ───────────────────────────── */
+  function renderGraph(data, width, height) {
+    var sim = runSimulation(data.nodes, data.edges, width, height);
+    var nodes = sim.nodes;
+    var edgeIndex = sim.edgeIndex;
+
+    var ns = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('width', width);
+    svg.setAttribute('height', height);
+    svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+
+    // Defs for arrow markers
+    var defs = document.createElementNS(ns, 'defs');
+    var edgeTypes = ['CAUSED_BY', 'DEPENDS_ON', 'CONFLICTS_WITH', 'CO_DECIDED'];
+    for (var t = 0; t < edgeTypes.length; t++) {
+      var marker = document.createElementNS(ns, 'marker');
+      marker.setAttribute('id', 'arrow-' + edgeTypes[t]);
+      marker.setAttribute('viewBox', '0 0 10 10');
+      marker.setAttribute('refX', '28');
+      marker.setAttribute('refY', '5');
+      marker.setAttribute('markerWidth', '6');
+      marker.setAttribute('markerHeight', '6');
+      marker.setAttribute('orient', 'auto-start-reverse');
+      var path = document.createElementNS(ns, 'path');
+      path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+      path.setAttribute('fill', EDGE_COLORS[edgeTypes[t]]);
+      marker.appendChild(path);
+      defs.appendChild(marker);
+    }
+    svg.appendChild(defs);
+
+    // Draw edges
+    for (var e = 0; e < data.edges.length; e++) {
+      if (e >= edgeIndex.length) break;
+      var si = edgeIndex[e].s;
+      var ti = edgeIndex[e].t;
+      var edgeType = data.edges[e].type || 'DEPENDS_ON';
+      var color = EDGE_COLORS[edgeType] || '#4d8eff';
+
+      var line = document.createElementNS(ns, 'line');
+      line.setAttribute('x1', nodes[si].x);
+      line.setAttribute('y1', nodes[si].y);
+      line.setAttribute('x2', nodes[ti].x);
+      line.setAttribute('y2', nodes[ti].y);
+      line.setAttribute('stroke', color);
+      line.setAttribute('stroke-width', '1.5');
+      line.setAttribute('stroke-opacity', '0.6');
+      line.setAttribute('marker-end', 'url(#arrow-' + edgeType + ')');
+      svg.appendChild(line);
+    }
+
+    // Draw nodes
+    var nodeRadius = 18;
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i];
+      var color = NODE_COLORS[node.ftype] || NODE_COLORS.decision;
+
+      // Glow circle
+      var glow = document.createElementNS(ns, 'circle');
+      glow.setAttribute('cx', node.x);
+      glow.setAttribute('cy', node.y);
+      glow.setAttribute('r', nodeRadius + 4);
+      glow.setAttribute('fill', 'none');
+      glow.setAttribute('stroke', color);
+      glow.setAttribute('stroke-opacity', '0.15');
+      glow.setAttribute('stroke-width', '4');
+      svg.appendChild(glow);
+
+      // Node circle
+      var circle = document.createElementNS(ns, 'circle');
+      circle.setAttribute('cx', node.x);
+      circle.setAttribute('cy', node.y);
+      circle.setAttribute('r', nodeRadius);
+      circle.setAttribute('fill', '#11141a');
+      circle.setAttribute('stroke', color);
+      circle.setAttribute('stroke-width', '2');
+      circle.setAttribute('cursor', 'pointer');
+      circle.setAttribute('data-node-id', node.id);
+      circle.addEventListener('click', (function(n) {
+        return function() { showNodeDetail(n); };
+      })(node));
+      circle.addEventListener('mouseenter', function() {
+        this.setAttribute('stroke-width', '3');
+        this.setAttribute('r', nodeRadius + 2);
+      });
+      circle.addEventListener('mouseleave', function() {
+        this.setAttribute('stroke-width', '2');
+        this.setAttribute('r', nodeRadius);
+      });
+      svg.appendChild(circle);
+
+      // Label
+      var text = document.createElementNS(ns, 'text');
+      text.setAttribute('x', node.x);
+      text.setAttribute('y', node.y + nodeRadius + 14);
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('class', 'node-label');
+      text.textContent = truncate(node.summary, 20);
+      svg.appendChild(text);
+    }
+
+    return svg;
+  }
+
+  /* ── Detail Panel ────────────────────────────── */
+  function showNodeDetail(node) {
+    document.getElementById('panelSummary').textContent = node.summary || node.id;
+
+    var badge = document.getElementById('panelBadge');
+    badge.textContent = node.ftype || 'decision';
+    badge.className = 'panel-badge ' + (node.ftype || 'decision');
+
+    var kwContainer = document.getElementById('panelKeywords');
+    kwContainer.innerHTML = '';
+    var kws = node.keywords || [];
+    if (kws.length === 0) {
+      kwContainer.innerHTML = '<span style="font-size:12px;color:var(--text-dim)">No keywords</span>';
+    } else {
+      for (var k = 0; k < kws.length; k++) {
+        var tag = document.createElement('span');
+        tag.className = 'keyword-tag';
+        tag.textContent = kws[k];
+        kwContainer.appendChild(tag);
+      }
+    }
+
+    // Find connected edges
+    var edgesContainer = document.getElementById('panelEdges');
+    edgesContainer.innerHTML = '';
+    var connected = graphData.edges.filter(function(e) {
+      return e.from === node.id || e.to === node.id;
+    });
+
+    if (connected.length === 0) {
+      edgesContainer.innerHTML = '<span style="font-size:12px;color:var(--text-dim)">No connected edges</span>';
+    } else {
+      for (var i = 0; i < connected.length; i++) {
+        var edge = connected[i];
+        var otherId = edge.from === node.id ? edge.to : edge.from;
+        var direction = edge.from === node.id ? ' \u2192 ' : ' \u2190 ';
+        var otherNode = nodeMap[otherId];
+        var otherLabel = otherNode ? truncate(otherNode.summary, 40) : otherId;
+        var edgeColor = EDGE_COLORS[edge.type] || '#4d8eff';
+
+        var item = document.createElement('div');
+        item.className = 'edge-item';
+        item.innerHTML =
+          '<div class="edge-type" style="color:' + edgeColor + '">' + (edge.type || 'UNKNOWN') + '</div>' +
+          '<div class="edge-target">' + direction + otherLabel + '</div>' +
+          (edge.reason ? '<div class="edge-reason">' + edge.reason + '</div>' : '');
+        edgesContainer.appendChild(item);
+      }
+    }
+
+    detailPanel.classList.add('visible');
+  }
+
+  /* ── Init ─────────────────────────────────────── */
+  async function init() {
+    graphData = await fetchData();
+
+    document.getElementById('nodeCount').textContent = graphData.nodes.length;
+    document.getElementById('edgeCount').textContent = graphData.edges.length;
+
+    if (graphData.nodes.length === 0) {
+      showEmptyState();
+      return;
+    }
+
+    // Build lookup
+    for (var i = 0; i < graphData.nodes.length; i++) {
+      nodeMap[graphData.nodes[i].id] = graphData.nodes[i];
+    }
+
+    var rect = container.getBoundingClientRect();
+    var width = rect.width || 900;
+    var height = rect.height || 600;
+
+    var svg = renderGraph(graphData, width, height);
+    container.insertBefore(svg, detailPanel);
+
+    // Close panel when clicking on empty SVG space
+    svg.addEventListener('click', function(e) {
+      if (e.target.tagName === 'svg') {
+        detailPanel.classList.remove('visible');
+      }
+    });
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

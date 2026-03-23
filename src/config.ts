@@ -36,6 +36,10 @@ export function loadConfig(): ProjectConfig {
   return _cache!
 }
 
+export function clearConfigCache(): void {
+  _cache = null
+}
+
 /**
  * 根据 npm package name 找到对应的 repo name。
  * 例如 "@biteme-bot/shared" → "biteme-shared"

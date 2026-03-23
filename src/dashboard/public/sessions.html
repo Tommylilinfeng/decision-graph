@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CKG — Sessions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<style>
+/* ── Layout ─────────────────────────────────────── */
+.content { display: flex; height: calc(100vh - 110px); }
+.session-list-panel { width: 400px; border-right: 1px solid var(--border-subtle); overflow-y: auto; flex-shrink: 0; }
+.detail-panel { flex: 1; overflow-y: auto; padding: 24px 32px; }
+
+/* ── Filter bar ─────────────────────────────────── */
+.list-toolbar { padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); display: flex; gap: 8px; align-items: center; background: var(--surface-0); position: sticky; top: 0; z-index: 10; }
+.list-toolbar select { background: var(--surface-2); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: var(--radius-sm); font-size: 12px; font-family: var(--sans); }
+.list-toolbar .count { margin-left: auto; font-size: 11px; color: var(--text-dim); font-family: var(--mono); }
+
+/* ── Session card ───────────────────────────────── */
+.session-card { padding: 14px 16px; border-bottom: 1px solid var(--border-subtle); cursor: pointer; transition: background var(--transition-fast); }
+.session-card:hover { background: var(--surface-1); }
+.session-card.active { background: var(--accent-surface); border-left: 3px solid var(--accent); }
+.session-card .top-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.session-card .tool-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 100px; text-transform: uppercase; letter-spacing: 0.5px; }
+.tool-claude { background: var(--purple-surface); color: var(--purple); }
+.tool-codex { background: var(--green-surface); color: var(--green); }
+.session-card .project-name { font-size: 13px; font-weight: 600; }
+.session-card .date { margin-left: auto; font-size: 11px; color: var(--text-dim); font-family: var(--mono); }
+.session-card .meta-row { display: flex; gap: 12px; font-size: 11px; color: var(--text-dim); font-family: var(--mono); }
+.session-card .status-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 100px; margin-left: auto; }
+.status-new { background: var(--surface-2); color: var(--text-dim); }
+.status-phase0_done, .status-phase1_done { background: var(--yellow-surface); color: var(--yellow); }
+.status-phase1_running, .status-phase2_running { background: var(--accent-surface); color: var(--accent); }
+.status-completed { background: var(--green-surface); color: var(--green); }
+.status-error { background: var(--red-surface); color: var(--red); }
+
+/* ── Detail panel ───────────────────────────────── */
+.detail-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text-dim); font-size: 14px; gap: 8px; }
+.detail-empty .icon { font-size: 40px; opacity: 0.3; }
+.detail-header { margin-bottom: 24px; }
+.detail-header h3 { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+.detail-header .meta { font-size: 12px; color: var(--text-dim); font-family: var(--mono); }
+
+/* ── Phase cards ────────────────────────────────── */
+.phase-card { background: var(--surface-1); border: 1px solid var(--border-subtle); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+.phase-card h4 { font-size: 14px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.phase-card h4 .phase-num { background: var(--accent-surface); color: var(--accent); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 100px; }
+.phase-card .file-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.phase-card .file-tag { font-size: 11px; font-family: var(--mono); padding: 3px 8px; background: var(--surface-2); border-radius: var(--radius-sm); color: var(--text-secondary); }
+.phase-card .preview-turn { font-size: 12px; padding: 8px 12px; margin: 4px 0; border-radius: var(--radius-sm); background: var(--surface-0); border-left: 2px solid var(--border); font-family: var(--mono); line-height: 1.5; color: var(--text-secondary); white-space: pre-wrap; word-break: break-all; max-height: 80px; overflow: hidden; }
+.preview-turn.role-user { border-left-color: var(--accent); }
+.preview-turn.role-assistant { border-left-color: var(--green); }
+.preview-turn.role-tool_action { border-left-color: var(--yellow); }
+
+/* ── Segment list ───────────────────────────────── */
+.segment-item { display: flex; gap: 10px; padding: 12px; margin: 6px 0; background: var(--surface-0); border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); align-items: flex-start; }
+.segment-item input[type="checkbox"] { margin-top: 3px; accent-color: var(--accent); }
+.segment-item .seg-icon { font-size: 16px; margin-top: 1px; }
+.segment-item .seg-body { flex: 1; }
+.segment-item .seg-range { font-size: 11px; font-family: var(--mono); color: var(--text-dim); }
+.segment-item .seg-summary { font-size: 13px; margin: 4px 0; line-height: 1.5; }
+.segment-item .seg-hints { font-size: 11px; color: var(--yellow); margin-top: 4px; }
+
+/* ── Buttons ────────────────────────────────────── */
+.btn { padding: 8px 20px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; border: none; cursor: pointer; transition: all var(--transition-fast); font-family: var(--sans); }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { filter: brightness(1.1); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-secondary { background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--surface-3); color: var(--text); }
+.btn-row { display: flex; gap: 10px; margin-top: 16px; align-items: center; }
+.btn-row .spacer { flex: 1; }
+
+/* ── Log viewer ─────────────────────────────────── */
+.log-area { background: var(--surface-0); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 12px; font-family: var(--mono); font-size: 12px; line-height: 1.6; max-height: 300px; overflow-y: auto; color: var(--text-secondary); white-space: pre-wrap; }
+
+/* ── Results ─────────────────────────────────────── */
+.result-stat { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 100px; font-size: 13px; font-weight: 600; font-family: var(--mono); background: var(--surface-2); margin: 4px; }
+.result-stat .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+/* ── Spinner ─────────────────────────────────────── */
+.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
+
+/* ── Decision review ─────────────────────────── */
+.review-header { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+.review-header .count-badge { font-family:var(--mono); font-size:12px; font-weight:700; padding:3px 10px; border-radius:100px; background:var(--accent-surface); color:var(--accent); }
+.review-actions { margin-left:auto; display:flex; gap:6px; }
+.decision-card { background:var(--surface-0); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); padding:14px; margin:8px 0; transition:all var(--transition-fast); position:relative; }
+.decision-card:hover { border-color:var(--border); }
+.decision-card.rejected { opacity:0.35; border-color:var(--red); }
+.decision-card.approved { border-left:3px solid var(--green); }
+.dc-top { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.dc-type { font-size:10px; font-weight:700; text-transform:uppercase; padding:2px 8px; border-radius:4px; }
+.dc-type.decision { background:var(--accent-surface); color:var(--accent); }
+.dc-type.bug { background:var(--red-surface); color:var(--red); }
+.dc-type.suboptimal { background:var(--yellow-surface); color:var(--yellow); }
+.dc-conf { font-size:10px; font-family:var(--mono); color:var(--text-dim); padding:2px 6px; background:var(--surface-2); border-radius:3px; }
+.dc-actions { margin-left:auto; display:flex; gap:4px; }
+.dc-actions button { background:none; border:1px solid var(--border); border-radius:4px; padding:4px 10px; font-size:11px; font-weight:600; cursor:pointer; transition:all var(--transition-fast); color:var(--text-dim); font-family:var(--sans); }
+.dc-actions .btn-approve:hover { border-color:var(--green); color:var(--green); background:var(--green-surface); }
+.dc-actions .btn-reject:hover { border-color:var(--red); color:var(--red); background:var(--red-surface); }
+.dc-summary { font-size:13px; font-weight:600; margin-bottom:4px; line-height:1.5; }
+.dc-content { font-size:12px; color:var(--text-secondary); line-height:1.6; max-height:60px; overflow:hidden; cursor:pointer; }
+.dc-content.expanded { max-height:none; }
+.dc-meta { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+.dc-meta .kw { font-size:10px; font-family:var(--mono); padding:2px 6px; background:var(--surface-2); border-radius:3px; color:var(--text-dim); }
+.dc-meta .anchor { font-size:10px; font-family:var(--mono); padding:2px 6px; background:var(--green-surface); border-radius:3px; color:var(--green); }
+</style>
+</head>
+<body>
+
+<nav class="sidebar" id="sidebar"></nav>
+
+<div class="main">
+  <div class="page-hero">
+    <h2>Sessions</h2>
+    <p class="subtitle">Browse AI coding sessions from Claude Code, Codex, and other tools. Select sessions to extract design decisions.</p>
+  </div>
+
+  <div class="content">
+    <!-- Left: session list -->
+    <div class="session-list-panel">
+      <div class="list-toolbar">
+        <select id="filterTool">
+          <option value="">All Tools</option>
+          <option value="claude-code">Claude Code</option>
+          <option value="codex">Codex</option>
+        </select>
+        <select id="filterStatus">
+          <option value="">All Status</option>
+          <option value="new">New</option>
+          <option value="phase1_done">Segmented</option>
+          <option value="completed">Completed</option>
+        </select>
+        <span class="count" id="sessionCount">...</span>
+      </div>
+      <div id="sessionList">
+        <div class="detail-empty" style="height:200px"><div class="spinner"></div></div>
+      </div>
+    </div>
+
+    <!-- Right: detail panel -->
+    <div class="detail-panel" id="detailPanel">
+      <div class="detail-empty">
+        <div class="icon"></div>
+        <div>Select a session to preview</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/sidebar.js"></script>
+<script>
+const API = ''
+
+// ── State ───────────────────────────────────────
+let sessions = []
+let selectedId = null
+let currentState = null
+
+// ── Load session list ───────────────────────────
+async function loadSessions() {
+  try {
+    const res = await fetch(`${API}/api/sessions`)
+    sessions = await res.json()
+    renderList()
+  } catch (err) {
+    document.getElementById('sessionList').innerHTML = `<div class="detail-empty" style="height:200px;color:var(--red)">Failed to load sessions</div>`
+  }
+}
+
+function renderList() {
+  const toolFilter = document.getElementById('filterTool').value
+  const statusFilter = document.getElementById('filterStatus').value
+
+  let filtered = sessions
+  if (toolFilter) filtered = filtered.filter(s => s.tool === toolFilter)
+  if (statusFilter) filtered = filtered.filter(s => s.status === statusFilter)
+
+  // skip tiny sessions
+  filtered = filtered.filter(s => s.fileSize > 2000)
+
+  document.getElementById('sessionCount').textContent = `${filtered.length} sessions`
+
+  if (filtered.length === 0) {
+    document.getElementById('sessionList').innerHTML = `<div class="detail-empty" style="height:200px">No sessions found</div>`
+    return
+  }
+
+  document.getElementById('sessionList').innerHTML = filtered.map(s => {
+    const date = new Date(s.modifiedAt).toLocaleDateString('en-CA')
+    const size = (s.fileSize / 1024).toFixed(0)
+    const toolClass = s.tool === 'claude-code' ? 'tool-claude' : 'tool-codex'
+    const active = s.id === selectedId ? ' active' : ''
+    const turnsText = s.turnCount ? `${s.turnCount} turns` : `${size}KB`
+    const decisionsText = s.phase2Decisions ? ` · ${s.phase2Decisions} decisions` : ''
+
+    return `<div class="session-card${active}" onclick="selectSession('${s.id}')">
+      <div class="top-row">
+        <span class="tool-badge ${toolClass}">${s.tool}</span>
+        <span class="project-name">${s.project}</span>
+        <span class="date">${date}</span>
+      </div>
+      <div class="meta-row">
+        <span>${turnsText}${decisionsText}</span>
+        <span class="status-badge status-${s.status}">${formatStatus(s.status)}</span>
+      </div>
+    </div>`
+  }).join('')
+}
+
+function formatStatus(s) {
+  const map = { new: 'New', phase0_done: 'Previewed', phase1_running: 'Segmenting...', phase1_done: 'Segmented', phase2_running: 'Analyzing...', completed: 'Done', error: 'Error' }
+  return map[s] || s
+}
+
+// ── Select session ──────────────────────────────
+async function selectSession(id) {
+  selectedId = id
+  renderList()
+  const panel = document.getElementById('detailPanel')
+  panel.innerHTML = `<div class="detail-empty"><div class="spinner"></div><div>Loading preview...</div></div>`
+
+  try {
+    // check if we have persisted state
+    const stateRes = await fetch(`${API}/api/sessions/${id}/state`)
+    if (stateRes.ok) {
+      currentState = await stateRes.json()
+      // if we have phase1 or beyond, render from state
+      if (currentState.phase1) {
+        renderFromState(currentState)
+        return
+      }
+    }
+
+    // otherwise run Phase 0 preview
+    const res = await fetch(`${API}/api/sessions/${id}/preview`)
+    if (!res.ok) throw new Error('Preview failed')
+    const data = await res.json()
+    renderPreview(data)
+  } catch (err) {
+    panel.innerHTML = `<div class="detail-empty" style="color:var(--red)">${err.message}</div>`
+  }
+}
+
+// ── Render preview (Phase 0 done) ───────────────
+function renderPreview(data) {
+  const panel = document.getElementById('detailPanel')
+  const files = data.touchedFiles.slice(0, 15).map(f => `<span class="file-tag">${f.split('/').pop()}</span>`).join('')
+  const moreFiles = data.touchedFiles.length > 15 ? `<span class="file-tag">+${data.touchedFiles.length - 15} more</span>` : ''
+  const turns = (data.preview || []).map(t =>
+    `<div class="preview-turn role-${t.role}">${escHtml(t.content)}</div>`
+  ).join('')
+
+  panel.innerHTML = `
+    <div class="detail-header">
+      <h3>${data.project} — ${data.sessionId.slice(0, 8)}</h3>
+      <div class="meta">${data.turnCount} turns · ~${(data.estimatedTokens/1000).toFixed(1)}K tokens · ${data.sessionStart?.slice(0, 10) || ''}</div>
+    </div>
+
+    <div class="phase-card">
+      <h4><span class="phase-num">Phase 0</span> Preview</h4>
+      <div class="file-list">${files}${moreFiles}</div>
+      ${turns}
+      ${data.turnCount > 10 ? `<div style="font-size:11px;color:var(--text-dim);margin-top:8px">... and ${data.turnCount - 10} more turns</div>` : ''}
+      <div class="btn-row">
+        <div class="spacer"></div>
+        <button class="btn btn-primary" onclick="runSegmentation('${data.sessionId}')">Segment →</button>
+      </div>
+    </div>
+  `
+}
+
+// ── Run Phase 1: Segmentation ───────────────────
+async function runSegmentation(id) {
+  const panel = document.getElementById('detailPanel')
+  // add loading indicator to existing content
+  const btnRow = panel.querySelector('.btn-row')
+  if (btnRow) btnRow.innerHTML = `<div class="spacer"></div><span class="spinner"></span> <span style="font-size:13px;color:var(--text-dim)">Segmenting (this may take a minute)...</span>`
+
+  try {
+    const res = await fetch(`${API}/api/sessions/${id}/segment`, { method: 'POST' })
+    if (!res.ok) throw new Error('Segmentation failed')
+    const data = await res.json()
+
+    // reload full state
+    const stateRes = await fetch(`${API}/api/sessions/${id}/state`)
+    currentState = await stateRes.json()
+    renderFromState(currentState)
+    loadSessions() // refresh list status
+  } catch (err) {
+    if (btnRow) btnRow.innerHTML = `<div class="spacer"></div><span style="color:var(--red)">${err.message}</span>`
+  }
+}
+
+// ── Render from persisted state ─────────────────
+function renderFromState(state) {
+  const panel = document.getElementById('detailPanel')
+  let html = `
+    <div class="detail-header">
+      <h3>${state.project} — ${state.sessionId.slice(0, 8)}</h3>
+      <div class="meta">${state.phase0?.turnCount || '?'} turns · ~${((state.phase0?.estimatedTokens || 0) / 1000).toFixed(1)}K tokens · ${state.phase0?.sessionStart?.slice(0, 10) || ''}</div>
+    </div>
+  `
+
+  // Phase 0 summary
+  html += `
+    <div class="phase-card">
+      <h4><span class="phase-num">Phase 0</span> Preview ✓</h4>
+      <div class="file-list">${(state.phase0?.touchedFiles || []).slice(0, 10).map(f => `<span class="file-tag">${f.split('/').pop()}</span>`).join('')}</div>
+    </div>
+  `
+
+  // Phase 1 segments
+  if (state.phase1) {
+    const segs = state.phase1.segments
+    const withDecisions = segs.filter(s => s.hasDecisions)
+
+    html += `<div class="phase-card">
+      <h4><span class="phase-num">Phase 1</span> Segments — ${segs.length} segments (${withDecisions.length} with decisions)</h4>
+      <div id="segmentList">${segs.map((s, i) => {
+        const icon = s.hasDecisions ? '+' : '-'
+        const checked = s.hasDecisions ? 'checked' : ''
+        const approved = s.approved !== undefined ? (s.approved ? 'checked' : '') : checked
+        const disabled = state.status === 'completed' || state.status === 'phase2_running' ? 'disabled' : ''
+        return `<div class="segment-item">
+          <input type="checkbox" value="${i}" ${approved} ${disabled} class="seg-check">
+          <span class="seg-icon">${icon}</span>
+          <div class="seg-body">
+            <div class="seg-range">Turn ${s.startTurn}–${s.endTurn}</div>
+            <div class="seg-summary">${escHtml(s.summary)}</div>
+            ${s.decisionHints?.length ? `<div class="seg-hints">Hints: ${s.decisionHints.join(', ')}</div>` : ''}
+          </div>
+        </div>`
+      }).join('')}</div>`
+
+    if (state.status === 'phase1_done') {
+      html += `<div class="btn-row">
+        <button class="btn btn-secondary" onclick="toggleAllSegments(true)">Select All</button>
+        <button class="btn btn-secondary" onclick="toggleAllSegments(false)">Deselect All</button>
+        <div class="spacer"></div>
+        <button class="btn btn-primary" id="analyzeBtn" onclick="runAnalysis('${state.sessionId}')">Analyze Selected →</button>
+      </div>`
+    }
+
+    html += `</div>`
+  } else if (state.status === 'phase0_done') {
+    html += `<div class="phase-card">
+      <h4><span class="phase-num">Phase 1</span> Segmentation</h4>
+      <div class="btn-row"><div class="spacer"></div><button class="btn btn-primary" onclick="runSegmentation('${state.sessionId}')">Segment →</button></div>
+    </div>`
+  }
+
+  // Phase 2 results
+  if (state.phase2) {
+    html += `<div class="phase-card">
+      <h4><span class="phase-num">Phase 2</span> Analysis ${state.status === 'completed' ? '✓' : state.status === 'phase2_running' ? '...' : ''}</h4>
+      <div>
+        <span class="result-stat"><span class="dot" style="background:var(--accent)"></span> ${state.phase2.totalDecisions} decisions</span>
+        <span class="result-stat"><span class="dot" style="background:var(--green)"></span> ${state.phase2.totalAnchored} anchored</span>
+        <span class="result-stat"><span class="dot" style="background:var(--purple)"></span> ${state.phase2.totalEdges} edges</span>
+      </div>
+      ${state.phase2.results?.map(r => `<div style="font-size:12px;color:var(--text-dim);margin-top:6px;font-family:var(--mono)">Segment ${r.segmentIndex}: ${r.decisionCount} decisions, ${r.anchored} anchored</div>`).join('') || ''}
+      <div id="logArea"></div>
+    </div>`
+
+    // Phase 3: Decision Review (post-extraction approval)
+    if (state.status === 'completed') {
+      html += `<div class="phase-card" id="reviewCard">
+        <h4><span class="phase-num">Review</span> Approve Extracted Decisions</h4>
+        <div style="text-align:center;padding:20px"><div class="spinner"></div><div style="font-size:12px;color:var(--text-dim);margin-top:8px">Loading decisions...</div></div>
+      </div>`
+    }
+  }
+
+  panel.innerHTML = html
+
+  // Load decisions for review
+  if (state.status === 'completed' && state.phase2) {
+    loadDecisionsForReview(state.sessionId)
+  }
+}
+
+// ── Run Phase 2: Analysis ───────────────────────
+async function runAnalysis(id) {
+  const checks = document.querySelectorAll('.seg-check:checked')
+  const approved = [...checks].map(c => parseInt(c.value))
+  if (approved.length === 0) { alert('Select at least one segment'); return }
+
+  const btn = document.getElementById('analyzeBtn')
+  if (btn) { btn.disabled = true; btn.textContent = 'Analyzing...' }
+
+  try {
+    const res = await fetch(`${API}/api/sessions/${id}/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approved })
+    })
+    if (!res.ok) throw new Error('Analysis failed')
+
+    // start SSE stream
+    streamLogs(id)
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Analyze Selected →' }
+    alert(err.message)
+  }
+}
+
+function streamLogs(id) {
+  // add log area if not present
+  let logArea = document.getElementById('logArea')
+  if (!logArea) {
+    const phase2Card = document.querySelectorAll('.phase-card')
+    const lastCard = phase2Card[phase2Card.length - 1]
+    if (lastCard) {
+      logArea = document.createElement('div')
+      logArea.id = 'logArea'
+      lastCard.appendChild(logArea)
+    } else return
+  }
+  logArea.innerHTML = `<div class="log-area" id="logContent">Connecting...</div>`
+
+  const es = new EventSource(`${API}/api/sessions/${id}/stream`)
+  const logEl = document.getElementById('logContent')
+
+  es.addEventListener('log', (e) => {
+    if (logEl.textContent === 'Connecting...') logEl.textContent = ''
+    logEl.textContent += e.data + '\n'
+    logEl.scrollTop = logEl.scrollHeight
+  })
+
+  es.addEventListener('status', (e) => {
+    es.close()
+    logEl.textContent += `\n--- ${e.data} ---\n`
+    // reload state and list
+    setTimeout(async () => {
+      const stateRes = await fetch(`${API}/api/sessions/${id}/state`)
+      if (stateRes.ok) {
+        currentState = await stateRes.json()
+        renderFromState(currentState)
+      }
+      loadSessions()
+    }, 500)
+  })
+
+  es.addEventListener('error', () => {
+    es.close()
+    if (logEl) logEl.textContent += '\n--- connection lost ---\n'
+  })
+}
+
+// ── Phase 3: Decision Review ────────────────────
+let sessionDecisions = []
+
+async function loadDecisionsForReview(sessionId) {
+  const card = document.getElementById('reviewCard')
+  if (!card) return
+
+  try {
+    const res = await fetch(`${API}/api/sessions/${sessionId}/decisions`)
+    if (!res.ok) throw new Error('Failed to load decisions')
+    sessionDecisions = await res.json()
+    renderDecisionReview(card)
+  } catch (err) {
+    card.innerHTML = `<h4><span class="phase-num">Review</span> Approve Extracted Decisions</h4>
+      <div style="color:var(--text-dim);font-size:12px;padding:12px">${err.message}</div>`
+  }
+}
+
+function renderDecisionReview(card) {
+  const approved = sessionDecisions.filter(d => d.confidence === 'human_approved').length
+  const total = sessionDecisions.length
+
+  let html = `<div class="review-header">
+    <h4 style="margin:0"><span class="phase-num">Review</span> Extracted Decisions</h4>
+    <span class="count-badge">${total} decisions</span>
+    ${approved > 0 ? `<span style="font-size:11px;color:var(--green)">${approved} approved</span>` : ''}
+    <div class="review-actions">
+      <button class="btn btn-secondary" style="font-size:11px;padding:5px 12px" onclick="approveAllDecisions()">Approve All</button>
+    </div>
+  </div>`
+
+  if (sessionDecisions.length === 0) {
+    html += `<div style="color:var(--text-dim);font-size:13px;padding:20px;text-align:center">No decisions extracted from this session</div>`
+  } else {
+    html += sessionDecisions.map((d, i) => {
+      const typeClass = d.finding_type === 'bug' ? 'bug' : d.finding_type === 'suboptimal' ? 'suboptimal' : 'decision'
+      const isApproved = d.confidence === 'human_approved'
+      const cardClass = isApproved ? ' approved' : ''
+      const kws = (d.keywords || []).slice(0, 5).map(k => `<span class="kw">${escHtml(k)}</span>`).join('')
+      const anchors = (d.anchors || []).map(a => `<span class="anchor">→ ${escHtml(a)}</span>`).join('')
+
+      return `<div class="decision-card${cardClass}" id="dc-${i}">
+        <div class="dc-top">
+          <span class="dc-type ${typeClass}">${d.finding_type || 'decision'}</span>
+          <span class="dc-conf">${isApproved ? '✓ approved' : d.confidence || 'auto'}</span>
+          <div class="dc-actions">
+            ${!isApproved ? `<button class="btn-approve" onclick="approveDecision(${i})">✓ Approve</button>` : ''}
+            <button class="btn-reject" onclick="rejectDecision(${i})">✕ Delete</button>
+          </div>
+        </div>
+        <div class="dc-summary">${escHtml(d.summary)}</div>
+        <div class="dc-content" onclick="this.classList.toggle('expanded')">${escHtml(d.content)}</div>
+        <div class="dc-meta">${kws}${anchors}</div>
+      </div>`
+    }).join('')
+  }
+
+  card.innerHTML = html
+}
+
+async function approveDecision(idx) {
+  const d = sessionDecisions[idx]
+  try {
+    await fetch(`${API}/api/decisions/${encodeURIComponent(d.id)}/approve`, { method: 'PUT' })
+    d.confidence = 'human_approved'
+    renderDecisionReview(document.getElementById('reviewCard'))
+  } catch (err) {
+    alert('Failed: ' + err.message)
+  }
+}
+
+async function rejectDecision(idx) {
+  const d = sessionDecisions[idx]
+  if (!confirm(`Delete decision: "${d.summary.slice(0, 80)}..."?`)) return
+  try {
+    await fetch(`${API}/api/decisions/${encodeURIComponent(d.id)}`, { method: 'DELETE' })
+    sessionDecisions.splice(idx, 1)
+    renderDecisionReview(document.getElementById('reviewCard'))
+  } catch (err) {
+    alert('Failed: ' + err.message)
+  }
+}
+
+async function approveAllDecisions() {
+  const unapproved = sessionDecisions.filter(d => d.confidence !== 'human_approved')
+  if (unapproved.length === 0) return
+  if (!confirm(`Approve all ${unapproved.length} decisions?`)) return
+
+  for (const d of unapproved) {
+    try {
+      await fetch(`${API}/api/decisions/${encodeURIComponent(d.id)}/approve`, { method: 'PUT' })
+      d.confidence = 'human_approved'
+    } catch {}
+  }
+  renderDecisionReview(document.getElementById('reviewCard'))
+}
+
+// ── Helpers ─────────────────────────────────────
+function toggleAllSegments(checked) {
+  document.querySelectorAll('.seg-check').forEach(c => c.checked = checked)
+}
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+}
+
+// ── Init ────────────────────────────────────────
+document.getElementById('filterTool').addEventListener('change', renderList)
+document.getElementById('filterStatus').addEventListener('change', renderList)
+loadSessions()
+</script>
+</body>
+</html>

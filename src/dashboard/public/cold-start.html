@@ -6,112 +6,10 @@
 <title>CKG — Cold Start Pipeline</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
 <style>
-  :root {
-    --bg: #0c0e11;
-    --surface: #14171c;
-    --surface-2: #1c2028;
-    --border: #2a2f3a;
-    --text: #e0e4ec;
-    --text-dim: #6b7280;
-    --accent: #3b82f6;
-    --accent-hover: #60a5fa;
-    --green: #22c55e;
-    --red: #ef4444;
-    --yellow: #eab308;
-    --purple: #a78bfa;
-    --mono: 'JetBrains Mono', monospace;
-    --sans: 'DM Sans', sans-serif;
-  }
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family:var(--sans); background:var(--bg); color:var(--text); min-height:100vh; display:flex; }
-
-  /* ── Sidebar ─────────────────────────── */
-  .sidebar {
-    width: 220px;
-    min-height: 100vh;
-    background: var(--surface);
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    position: fixed;
-    top: 0; left: 0; bottom: 0;
-    z-index: 10;
-  }
-  .sidebar-brand {
-    padding: 20px 16px;
-    border-bottom: 1px solid var(--border);
-  }
-  .sidebar-brand h1 {
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: -0.3px;
-  }
-  .sidebar-brand p {
-    font-size: 11px;
-    color: var(--text-dim);
-    margin-top: 4px;
-    line-height: 1.4;
-  }
-  .sidebar-nav { padding: 12px 8px; flex: 1; }
-  .sidebar-section {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    padding: 12px 12px 6px;
-  }
-  .nav-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 9px 12px;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-dim);
-    text-decoration: none;
-    cursor: pointer;
-    transition: all 0.12s;
-    border: none;
-    background: none;
-    width: 100%;
-    text-align: left;
-  }
-  .nav-item:hover { background: var(--surface-2); color: var(--text); }
-  .nav-item.active { background: var(--surface-2); color: var(--accent); }
-  .nav-item .icon { width: 18px; text-align: center; font-size: 14px; }
-
-  /* ── Main ────────────────────────────── */
-  .main { margin-left: 220px; flex: 1; display: flex; flex-direction: column; height: 100vh; }
-
-  .page-header {
-    padding: 16px 24px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    flex-shrink: 0;
-  }
-  .page-header h2 { font-size: 18px; font-weight: 700; }
-
-  .status-badge {
-    margin-left: auto;
-    font-family: var(--mono);
-    font-size: 11px;
-    padding: 3px 10px;
-    border-radius: 4px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  .status-badge.idle { background: var(--surface-2); color: var(--text-dim); }
-  .status-badge.running { background: #1e3a5f; color: var(--accent); animation: pulse 2s infinite; }
-  .status-badge.done { background: #14532d; color: var(--green); }
-  .status-badge.error { background: #450a0a; color: var(--red); }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
-
   /* ── Layout ──────────────────────────── */
+  .main { display: flex; flex-direction: column; height: 100vh; }
   .content-area {
     flex: 1;
     display: grid;
@@ -129,52 +27,6 @@
     gap: 16px;
     overflow-y: auto;
   }
-  .field label {
-    display: block;
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 6px;
-  }
-  textarea, select, input[type="number"] {
-    width: 100%;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text);
-    font-family: var(--sans);
-    font-size: 14px;
-    padding: 9px 12px;
-    transition: border-color 0.15s;
-  }
-  textarea:focus, select:focus, input:focus { outline:none; border-color:var(--accent); }
-  textarea { resize:vertical; min-height:90px; line-height:1.5; }
-  select {
-    cursor:pointer; appearance:none;
-    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-    background-repeat:no-repeat; background-position:right 12px center; padding-right:36px;
-  }
-  .checkbox-field { display:flex; align-items:center; gap:10px; }
-  .checkbox-field input[type="checkbox"] { width:16px; height:16px; accent-color:var(--accent); cursor:pointer; }
-  .checkbox-field label { margin:0; cursor:pointer; font-size:13px; color:var(--text); text-transform:none; letter-spacing:normal; font-weight:400; }
-  .row { display:flex; gap:12px; }
-  .row .field { flex:1; }
-
-  /* ── Buttons ─────────────────────────── */
-  button {
-    font-family:var(--sans); font-size:13px; font-weight:600;
-    padding:9px 18px; border:none; border-radius:6px; cursor:pointer; transition:all 0.15s;
-    display:flex; align-items:center; justify-content:center; gap:6px;
-  }
-  .btn-primary { background:var(--accent); color:white; width:100%; }
-  .btn-primary:hover { background:var(--accent-hover); }
-  .btn-primary:disabled { background:var(--surface-2); color:var(--text-dim); cursor:not-allowed; }
-  .btn-stop { background:var(--surface-2); color:var(--red); border:1px solid #450a0a; width:100%; }
-  .btn-stop:hover { background:#1c1012; }
-  .btn-clear { background:var(--surface-2); color:var(--text-dim); border:1px solid var(--border); }
-  .btn-clear:hover { color:var(--text); }
 
   /* ── Suggestions ─────────────────────── */
   .suggestions { display:flex; flex-wrap:wrap; gap:6px; }
@@ -185,18 +37,9 @@
   }
   .suggestion:hover { border-color:var(--accent); color:var(--text); }
 
-  /* ── Log Panel ───────────────────────── */
-  .log-panel { display:flex; flex-direction:column; background:var(--surface); min-height:0; overflow:hidden; }
-  .log-header {
-    padding: 10px 20px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 13px;
-    color: var(--text-dim);
-    flex-shrink: 0;
-  }
+  .btn-primary { width:100%; }
+  .btn-stop { width:100%; }
+
   .round-indicator { display:flex; gap:10px; }
   .round-indicator span {
     padding:2px 8px; border-radius:3px;
@@ -204,26 +47,6 @@
   }
   .round-indicator span.active { background:#1e3a5f; color:var(--accent); }
   .round-indicator span.done { background:#14532d; color:var(--green); }
-
-  .log-output {
-    flex:1; overflow-y:auto; padding:14px 20px; min-height:0;
-    font-family:var(--mono); font-size:13px; line-height:1.7;
-    white-space:pre-wrap; word-break:break-all;
-  }
-  .log-output .line { padding:1px 0; }
-  .log-output .line.round { color:var(--accent); font-weight:700; margin-top:8px; }
-  .log-output .line.success { color:var(--green); }
-  .log-output .line.warn { color:var(--yellow); }
-  .log-output .line.error { color:var(--red); }
-  .log-output .line.file { color:var(--purple); }
-  .log-output .empty { color:var(--text-dim); font-style:italic; }
-
-  .log-footer {
-    border-top:1px solid var(--border);
-    padding:8px 20px;
-    font-family:var(--mono); font-size:12px; color:var(--text-dim);
-    display:flex; gap:20px; flex-shrink:0;
-  }
 </style>
 </head>
 <body>
@@ -242,15 +65,15 @@
     <div class="controls">
       <div class="field">
         <label>Goal</label>
-        <textarea id="goalInput" placeholder="描述你想分析的方向...&#10;例如：订单流程和支付&#10;例如：coupon系统的领取和核销逻辑"></textarea>
+        <textarea id="goalInput" placeholder="Describe the area to analyze...&#10;e.g.: authentication and session management&#10;e.g.: data validation pipeline"></textarea>
       </div>
 
       <div class="suggestions" id="suggestions">
-        <span class="suggestion" data-goal="订单流程和支付">订单流程</span>
-        <span class="suggestion" data-goal="coupon系统的领取和核销逻辑">Coupon系统</span>
-        <span class="suggestion" data-goal="购物车和customization处理">购物车</span>
-        <span class="suggestion" data-goal="菜单加载和vendor可用性判断">菜单系统</span>
-        <span class="suggestion" data-goal="用户认证和profile管理">用户系统</span>
+        <span class="suggestion" data-goal="authentication and session management">Auth</span>
+        <span class="suggestion" data-goal="data validation and error handling">Validation</span>
+        <span class="suggestion" data-goal="API routing and middleware">Routing</span>
+        <span class="suggestion" data-goal="database queries and migrations">Database</span>
+        <span class="suggestion" data-goal="state management and caching">State</span>
       </div>
 
       <div class="row">
@@ -272,7 +95,7 @@
       </div>
       <div class="checkbox-field">
         <input type="checkbox" id="dryRunCheck">
-        <label for="dryRunCheck">Dry run (只看 Round 1 选文件，不分析)</label>
+        <label for="dryRunCheck">Dry run (Round 1 file selection only, no analysis)</label>
       </div>
 
       <button class="btn-primary" id="startBtn" onclick="startPipeline()">▶ Start Pipeline</button>

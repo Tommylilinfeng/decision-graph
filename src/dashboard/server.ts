@@ -10,7 +10,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { streamSSE } from 'hono/streaming'
 import { getSession, verifyConnectivity } from '../db/client'
-import { loadConfig } from '../config'
+import { loadConfig, clearConfigCache } from '../config'
 import { spawn, ChildProcess } from 'child_process'
 import fs from 'fs'
 import path from 'path'
@@ -399,6 +399,67 @@ app.get('/api/repos', async (c) => {
   }
 })
 
+// ── API: Add / Delete repo ──────────────────────────────
+
+app.post('/api/repos', async (c) => {
+  try {
+    const body = await c.req.json()
+    const { name, repoPath, type, cpgFile, packages, skipEdgeFunctions } = body
+    if (!name || !repoPath || !type) {
+      return c.json({ error: 'name, repoPath, and type are required' }, 400)
+    }
+
+    const configPath = path.resolve(__dirname, '../../ckg.config.json')
+    const raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+    if (!raw.repos) raw.repos = []
+
+    // Check for duplicate name
+    if (raw.repos.some((r: any) => r.name === name)) {
+      return c.json({ error: `Repo "${name}" already exists` }, 409)
+    }
+
+    const newRepo: any = {
+      name,
+      path: repoPath,
+      type,
+      cpgFile: cpgFile || `data/${name}.json`,
+      packages: packages || [],
+    }
+    if (skipEdgeFunctions) newRepo.skipEdgeFunctions = true
+
+    raw.repos.push(newRepo)
+    fs.writeFileSync(configPath, JSON.stringify(raw, null, 2))
+
+    clearConfigCache()
+
+    return c.json({ status: 'added', repo: newRepo })
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500)
+  }
+})
+
+app.delete('/api/repos/:name', async (c) => {
+  try {
+    const name = c.req.param('name')
+    const configPath = path.resolve(__dirname, '../../ckg.config.json')
+    const raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+    if (!raw.repos) raw.repos = []
+
+    const idx = raw.repos.findIndex((r: any) => r.name === name)
+    if (idx === -1) {
+      return c.json({ error: `Repo "${name}" not found` }, 404)
+    }
+
+    raw.repos.splice(idx, 1)
+    fs.writeFileSync(configPath, JSON.stringify(raw, null, 2))
+    clearConfigCache()
+
+    return c.json({ status: 'deleted', name })
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500)
+  }
+})
+
 // ── API: 覆盖树 ─────────────────────────────────────────
 
 app.get('/api/coverage/:repo', async (c) => {
@@ -562,6 +623,7 @@ app.get('/api/decisions', async (c) => {
         confidence: d.confidence,
         finding_type: d.finding_type || 'decision',
         critique: d.critique || null,
+        staleness: d.staleness || 'active',
         owner: d.owner,
         created_at: d.created_at,
         scope: d.scope,
@@ -1153,6 +1215,163 @@ app.put('/api/pipeline/ai-config', async (c) => {
   } catch (err: any) {
     return c.json({ error: err.message }, 500)
   }
+})
+
+// ── Quick Scan: zero-config analysis ────────────────────
+
+interface ScanJob {
+  process: ChildProcess | null
+  status: 'idle' | 'running' | 'done' | 'error'
+  repo: string
+  logs: string[]
+  startedAt: number
+}
+
+const scanJob: ScanJob = {
+  process: null,
+  status: 'idle',
+  repo: '',
+  logs: [],
+  startedAt: 0,
+}
+
+app.get('/api/scan/repos', (c) => {
+  try {
+    const config = loadConfig()
+    return c.json(config.repos.map(r => ({ name: r.name, path: r.path, type: r.type })))
+  } catch {
+    return c.json([])
+  }
+})
+
+app.get('/api/scan/preflight', async (c) => {
+  // Check if Memgraph is up and repos have data
+  const result: any = { memgraph: false, repos: [], hasData: false }
+  try {
+    const config = loadConfig()
+    result.repos = config.repos.map(r => ({
+      name: r.name, type: r.type,
+      cpgExists: fs.existsSync(path.resolve(__dirname, '../..', r.cpgFile)),
+    }))
+  } catch {}
+  try {
+    const session = await getSession()
+    try {
+      await session.run('RETURN 1')
+      result.memgraph = true
+      const countResult = await session.run(
+        `MATCH (ce:CodeEntity {entity_type: 'service'}) RETURN count(ce) AS cnt`
+      )
+      result.hasData = (countResult.records[0]?.get('cnt')?.toNumber?.() ?? 0) > 0
+    } finally {
+      await session.close()
+    }
+  } catch {}
+  return c.json(result)
+})
+
+app.get('/api/scan/status', (c) => {
+  return c.json({
+    status: scanJob.status,
+    repo: scanJob.repo,
+    logCount: scanJob.logs.length,
+    startedAt: scanJob.startedAt,
+  })
+})
+
+app.post('/api/scan/start', async (c) => {
+  if (scanJob.status === 'running') {
+    return c.json({ error: 'Scan already running' }, 409)
+  }
+
+  const body = await c.req.json()
+  const { repo, concurrency } = body
+
+  if (!repo) {
+    return c.json({ error: 'repo is required' }, 400)
+  }
+
+  scanJob.status = 'running'
+  scanJob.repo = repo
+  scanJob.logs = []
+  scanJob.startedAt = Date.now()
+
+  // Use cold-start-v2 with an auto-generated goal
+  const scanArgs = [
+    '--transpile-only',
+    path.resolve(__dirname, '../ingestion/cold-start-v2.ts'),
+    '--goal', 'core business logic, architecture decisions, and important design patterns',
+    '--repo', repo,
+    '--force',
+  ]
+  if (concurrency) scanArgs.push('--concurrency', String(concurrency))
+
+  const tsNode = path.resolve(__dirname, '../../node_modules/.bin/ts-node')
+
+  const child = spawn(tsNode, scanArgs, {
+    cwd: path.resolve(__dirname, '../..'),
+    env: { ...process.env },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+
+  scanJob.process = child
+
+  const addLog = (line: string) => {
+    if (line.trim()) scanJob.logs.push(line)
+  }
+
+  child.stdout?.on('data', (data: Buffer) => {
+    data.toString().split('\n').forEach(addLog)
+  })
+  child.stderr?.on('data', (data: Buffer) => {
+    data.toString().split('\n').forEach(addLog)
+  })
+
+  child.on('close', (code) => {
+    scanJob.status = code === 0 ? 'done' : 'error'
+    addLog(code === 0 ? 'Scan finished' : `Scan exited with code ${code}`)
+    scanJob.process = null
+  })
+
+  child.on('error', (err) => {
+    scanJob.status = 'error'
+    addLog(`Failed to start: ${err.message}`)
+    scanJob.process = null
+  })
+
+  return c.json({ status: 'started', directory })
+})
+
+app.get('/api/scan/stream', (c) => {
+  return streamSSE(c, async (stream) => {
+    let lastIdx = 0
+    let done = false
+
+    while (!done) {
+      while (lastIdx < scanJob.logs.length) {
+        await stream.writeSSE({ data: scanJob.logs[lastIdx], event: 'log' })
+        lastIdx++
+      }
+
+      if (scanJob.status !== 'running' && lastIdx >= scanJob.logs.length) {
+        await stream.writeSSE({ data: scanJob.status, event: 'status' })
+        done = true
+        break
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 300))
+    }
+  })
+})
+
+app.post('/api/scan/stop', (c) => {
+  if (scanJob.process) {
+    scanJob.process.kill('SIGTERM')
+    scanJob.status = 'idle'
+    scanJob.logs.push('Scan stopped by user')
+    scanJob.process = null
+  }
+  return c.json({ status: 'stopped' })
 })
 
 // ── Cold-start v2: Pipeline control ─────────────────────
@@ -2505,6 +2724,12 @@ app.get('/sidebar.js', (c) => {
   return c.body(js, 200, { 'Content-Type': 'application/javascript; charset=utf-8' })
 })
 
+app.get('/shared.css', (c) => {
+  const cssPath = path.resolve(__dirname, 'public', 'shared.css')
+  const css = fs.readFileSync(cssPath, 'utf-8')
+  return c.body(css, 200, { 'Content-Type': 'text/css; charset=utf-8' })
+})
+
 // ── API: Templates ──────────────────────────────────────
 
 import { loadTemplate, listTemplates, saveTemplate, deleteTemplate, getDefaultConfig } from '../core/template-loader'
@@ -2619,6 +2844,18 @@ app.get('/system', (c) => {
   return c.html(html)
 })
 
+app.get('/onboarding', (c) => {
+  const htmlPath = path.resolve(__dirname, 'public', 'onboarding.html')
+  const html = fs.readFileSync(htmlPath, 'utf-8')
+  return c.html(html)
+})
+
+app.get('/scan', (c) => {
+  const htmlPath = path.resolve(__dirname, 'public', 'scan.html')
+  const html = fs.readFileSync(htmlPath, 'utf-8')
+  return c.html(html)
+})
+
 app.get('/run', (c) => {
   const htmlPath = path.resolve(__dirname, 'public', 'run.html')
   const html = fs.readFileSync(htmlPath, 'utf-8')
@@ -2653,10 +2890,8 @@ app.get('/', (c) => {
   return c.redirect('/overview')
 })
 
-app.get('*', async (c) => {
-  const htmlPath = path.resolve(__dirname, 'public', 'index.html')
-  const html = fs.readFileSync(htmlPath, 'utf-8')
-  return c.html(html)
+app.get('*', (c) => {
+  return c.redirect('/overview')
 })
 
 // ── 启动 ────────────────────────────────────────────────

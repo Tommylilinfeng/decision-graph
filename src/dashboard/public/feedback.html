@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CKG — Feedback Analytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<style>
+/* ── Stats Grid ─────────────────────────────────── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  padding: 24px 40px;
+}
+.stat-card {
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow-card);
+  transition: all var(--transition-fast);
+}
+.stat-card:hover {
+  border-color: var(--border);
+  box-shadow: var(--shadow-hover);
+}
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  font-family: var(--mono);
+  letter-spacing: -1px;
+}
+.stat-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 6px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.stat-value.blue { color: var(--accent); }
+.stat-value.green { color: var(--green); }
+.stat-value.yellow { color: var(--yellow); }
+.stat-value.red { color: var(--red); }
+.stat-value.purple { color: var(--purple); }
+
+/* ── Content Grid ───────────────────────────────── */
+.content-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 0 40px 40px;
+}
+
+/* ── Cards ──────────────────────────────────────── */
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.card-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text);
+}
+.card-header .card-count {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  padding: 2px 10px;
+  border-radius: 100px;
+}
+.card-body {
+  padding: 0;
+  max-height: 520px;
+  overflow-y: auto;
+}
+.card-body::-webkit-scrollbar { width: 4px; }
+.card-body::-webkit-scrollbar-track { background: transparent; }
+.card-body::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 4px; }
+
+/* ── Decision Items ─────────────────────────────── */
+.decision-item {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background var(--transition-fast);
+}
+.decision-item:last-child { border-bottom: none; }
+.decision-item:hover { background: var(--surface-2); }
+.decision-item .rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+.decision-item .rank.top { background: var(--accent-surface); color: var(--accent); }
+.decision-item .summary {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text);
+  margin-bottom: 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.decision-item .meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Badges ─────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 100px;
+  font-size: 11px;
+  font-family: var(--mono);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge-source {
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+.badge-scope {
+  background: var(--purple-surface);
+  color: var(--purple);
+  border: 1px solid rgba(167, 139, 250, 0.15);
+}
+.badge-count {
+  background: var(--green-surface);
+  color: var(--green);
+  border: 1px solid rgba(52, 210, 123, 0.15);
+  gap: 4px;
+}
+.badge-date {
+  background: var(--surface-2);
+  color: var(--text-dim);
+  border: 1px solid var(--border-subtle);
+}
+
+/* ── Use Count Bar ──────────────────────────────── */
+.use-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.use-bar {
+  flex: 1;
+  height: 5px;
+  background: var(--surface-3);
+  border-radius: 3px;
+  overflow: hidden;
+  max-width: 120px;
+}
+.use-bar-fill {
+  height: 100%;
+  background: var(--green);
+  border-radius: 3px;
+  transition: width var(--transition-smooth);
+}
+
+/* ── Never-used Items ───────────────────────────── */
+.never-item {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background var(--transition-fast);
+}
+.never-item:last-child { border-bottom: none; }
+.never-item:hover { background: var(--surface-2); }
+.never-item .summary {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.never-item .meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Loading & Empty States ─────────────────────── */
+.loading-state, .empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 20px;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 500;
+}
+.loading-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--surface-3);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 10px;
+}
+
+/* ── Error State ────────────────────────────────── */
+.error-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 20px;
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 500;
+}
+</style>
+</head>
+<body>
+
+<nav class="sidebar" id="sidebar"></nav>
+<script src="/sidebar.js"></script>
+
+<div class="main">
+  <!-- Hero -->
+  <div class="page-hero">
+    <h2>Feedback Analytics</h2>
+    <div class="subtitle">Which decisions are actually referenced by AI coding assistants via MCP</div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-value blue" id="statEntries">&mdash;</div>
+      <div class="stat-label">Feedback Entries</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value green" id="statUsages">&mdash;</div>
+      <div class="stat-label">Total Usages</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value purple" id="statUnique">&mdash;</div>
+      <div class="stat-label">Unique Decisions Used</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value red" id="statNeverUsed">&mdash;</div>
+      <div class="stat-label">Never Referenced</div>
+    </div>
+  </div>
+
+  <!-- Two-column grid -->
+  <div class="content-grid">
+    <!-- Most Used -->
+    <div class="card">
+      <div class="card-header">
+        Most Used Decisions
+        <span class="card-count" id="topCount">&mdash;</span>
+      </div>
+      <div class="card-body" id="topUsedList">
+        <div class="loading-state"><div class="loading-spinner"></div> Loading...</div>
+      </div>
+    </div>
+
+    <!-- Never Referenced -->
+    <div class="card">
+      <div class="card-header">
+        Never Referenced
+        <span class="card-count" id="neverCount">&mdash;</span>
+      </div>
+      <div class="card-body" id="neverUsedList">
+        <div class="loading-state"><div class="loading-spinner"></div> Loading...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const $ = (sel) => document.querySelector(sel);
+
+  function escHtml(s) {
+    if (!s) return '';
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function truncate(s, len) {
+    if (!s) return '';
+    return s.length > len ? s.slice(0, len) + '...' : s;
+  }
+
+  function formatDate(d) {
+    if (!d) return '';
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return d;
+    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function sourceBadge(source) {
+    if (!source) return '';
+    const label = escHtml(source.replace(/_/g, ' '));
+    return `<span class="badge badge-source">${label}</span>`;
+  }
+
+  function scopeBadges(scope) {
+    if (!scope || !Array.isArray(scope) || scope.length === 0) return '';
+    return scope.map(s => `<span class="badge badge-scope">${escHtml(s)}</span>`).join('');
+  }
+
+  function renderTopUsed(items, maxCount) {
+    if (!items || items.length === 0) {
+      return '<div class="empty-state">No usage data yet</div>';
+    }
+    const max = maxCount || Math.max(...items.map(i => i.useCount || 0), 1);
+    return items.map((item, idx) => {
+      const pct = Math.round(((item.useCount || 0) / max) * 100);
+      const rankClass = idx < 3 ? ' top' : '';
+      return `
+        <div class="decision-item">
+          <div class="use-bar-wrap">
+            <span class="rank${rankClass}">${idx + 1}</span>
+            <div class="use-bar"><div class="use-bar-fill" style="width:${pct}%"></div></div>
+            <span class="badge badge-count">${item.useCount || 0} uses</span>
+          </div>
+          <div class="summary">${escHtml(truncate(item.summary, 120))}</div>
+          <div class="meta">
+            ${sourceBadge(item.source)}
+            ${scopeBadges(item.scope)}
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function renderNeverUsed(items) {
+    if (!items || items.length === 0) {
+      return '<div class="empty-state">All decisions have been used</div>';
+    }
+    return items.map(item => `
+      <div class="never-item">
+        <div class="summary">${escHtml(truncate(item.summary, 120))}</div>
+        <div class="meta">
+          ${sourceBadge(item.source)}
+          ${item.created_at ? `<span class="badge badge-date">${formatDate(item.created_at)}</span>` : ''}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function loadStats() {
+    try {
+      const res = await fetch('/api/feedback/stats');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      $('#statEntries').textContent = (data.totalEntries ?? 0).toLocaleString();
+      $('#statUsages').textContent = (data.totalUsages ?? 0).toLocaleString();
+      $('#statUnique').textContent = (data.uniqueDecisionsUsed ?? 0).toLocaleString();
+      $('#statNeverUsed').textContent = (data.neverUsedTotal ?? 0).toLocaleString();
+
+      const topItems = data.topUsed || [];
+      $('#topCount').textContent = topItems.length;
+      $('#topUsedList').innerHTML = renderTopUsed(topItems);
+
+      const neverItems = data.neverUsed || [];
+      $('#neverCount').textContent = data.neverUsedTotal ?? neverItems.length;
+      $('#neverUsedList').innerHTML = renderNeverUsed(neverItems);
+
+    } catch (err) {
+      console.error('Failed to load feedback stats:', err);
+      $('#topUsedList').innerHTML = `<div class="error-state">Failed to load data</div>`;
+      $('#neverUsedList').innerHTML = `<div class="error-state">Failed to load data</div>`;
+    }
+  }
+
+  loadStats();
+})();
+</script>
+</body>
+</html>

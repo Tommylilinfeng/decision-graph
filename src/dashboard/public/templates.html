@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CKG — Templates</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<style>
+.page-hero { display:flex; align-items:flex-end; justify-content:space-between; }
+.content { max-width:1400px; }
+
+/* Layout: two columns */
+.tpl-layout { display:grid; grid-template-columns:280px 1fr; gap:20px; }
+
+/* Template list */
+.tpl-list { display:flex; flex-direction:column; gap:8px; }
+.tpl-card { padding:14px 16px; border-radius:var(--radius-sm); border:1px solid var(--border-subtle); background:var(--surface-1); cursor:pointer; transition:all var(--transition-fast); }
+.tpl-card:hover { border-color:var(--border); background:var(--surface-2); }
+.tpl-card.active { border-color:var(--accent); background:var(--accent-surface); }
+.tpl-card .tpl-name { font-family:var(--mono); font-size:13px; font-weight:700; display:flex; align-items:center; gap:8px; }
+.tpl-card .tpl-name .badge-default { font-size:9px; font-weight:600; padding:2px 6px; border-radius:3px; background:var(--purple-surface); color:var(--purple); text-transform:uppercase; letter-spacing:0.5px; }
+.tpl-card .tpl-name .badge-extends { font-size:9px; font-weight:500; padding:2px 6px; border-radius:3px; background:var(--surface-3); color:var(--text-dim); }
+.tpl-card .tpl-desc { font-size:11px; color:var(--text-dim); margin-top:6px; line-height:1.4; }
+
+.new-tpl-btn { padding:12px 16px; border-radius:var(--radius-sm); border:1px dashed var(--border); background:transparent; color:var(--text-dim); font-size:12px; font-weight:600; cursor:pointer; transition:all var(--transition-fast); text-align:center; font-family:var(--sans); }
+.new-tpl-btn:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-surface); }
+
+/* Editor panel */
+.tpl-editor { min-height:400px; }
+.tpl-empty { display:flex; align-items:center; justify-content:center; min-height:400px; color:var(--text-dim); font-size:13px; }
+
+.editor-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+.editor-header h3 { font-family:var(--mono); font-size:16px; font-weight:700; }
+.editor-actions { display:flex; gap:8px; }
+.btn { padding:8px 16px; border-radius:var(--radius-sm); font-size:12px; font-weight:600; cursor:pointer; transition:all var(--transition-fast); border:1px solid var(--border); background:var(--surface-2); color:var(--text-secondary); font-family:var(--sans); }
+.btn:hover { color:var(--text); border-color:var(--accent); }
+.btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+.btn.primary:hover { filter:brightness(1.1); }
+.btn.danger { color:var(--red); border-color:rgba(240,86,86,0.3); }
+.btn.danger:hover { background:var(--red-surface); border-color:var(--red); }
+
+/* Meta fields */
+.meta-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px; }
+.field { display:flex; flex-direction:column; gap:4px; }
+.field label { font-size:11px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; }
+.field input, .field select, .field textarea { padding:8px 12px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; font-family:var(--sans); outline:none; transition:border-color var(--transition-fast); }
+.field input:focus, .field select:focus, .field textarea:focus { border-color:var(--accent); }
+.field textarea { font-family:var(--mono); font-size:12px; resize:vertical; min-height:60px; }
+.field input[type="number"] { font-family:var(--mono); width:100%; }
+
+/* Config sections */
+.config-section { margin-bottom:16px; }
+.config-section-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--text-dim); padding:10px 0 8px; border-bottom:1px solid var(--border-subtle); margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+.config-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 16px; }
+.config-grid.cols-3 { grid-template-columns:1fr 1fr 1fr; }
+
+/* Override indicator */
+.field.overridden label { color:var(--accent); }
+.field.overridden label::after { content:'●'; margin-left:4px; font-size:8px; }
+.field.inherited input, .field.inherited select { color:var(--text-dim); }
+
+/* Chips for array fields */
+.chip-group { display:flex; flex-wrap:wrap; gap:6px; }
+.chip { padding:4px 12px; border-radius:100px; font-size:11px; font-weight:600; cursor:pointer; transition:all var(--transition-fast); border:1px solid var(--border); background:var(--surface-2); color:var(--text-dim); user-select:none; }
+.chip.active { background:var(--accent-surface); color:var(--accent); border-color:rgba(77,142,255,0.3); }
+.chip:hover { border-color:var(--accent); }
+
+/* Toast */
+.toast { position:fixed; bottom:24px; right:24px; padding:12px 20px; border-radius:var(--radius-sm); background:var(--green); color:#fff; font-size:13px; font-weight:600; z-index:200; opacity:0; transform:translateY(10px); transition:all 0.3s; pointer-events:none; }
+.toast.show { opacity:1; transform:translateY(0); }
+.toast.error { background:var(--red); }
+
+/* Dialog */
+.dialog-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:100; backdrop-filter:blur(4px); justify-content:center; align-items:center; }
+.dialog-overlay.open { display:flex; }
+.dialog { width:400px; background:var(--surface-0); border:1px solid var(--border); border-radius:var(--radius); padding:24px; }
+.dialog h4 { font-size:15px; margin-bottom:16px; }
+.dialog .field { margin-bottom:12px; }
+.dialog .dialog-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
+</style>
+</head>
+<body>
+
+<nav class="sidebar" id="sidebar"></nav>
+
+<div class="main">
+  <div class="page-hero">
+    <div>
+      <h2>Templates</h2>
+      <p class="subtitle">Configure how analyze_function extracts decisions — context depth, code granularity, prompt, output</p>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="tpl-layout">
+      <!-- Left: template list -->
+      <div>
+        <div class="tpl-list" id="templateList"></div>
+        <button class="new-tpl-btn" onclick="showNewDialog()" style="margin-top:10px">+ New Template</button>
+      </div>
+
+      <!-- Right: editor -->
+      <div class="card tpl-editor" id="editorPanel">
+        <div class="tpl-empty" id="emptyState">Select a template to edit</div>
+        <div class="card-body" id="editorContent" style="display:none">
+
+          <div class="editor-header">
+            <h3 id="editorTitle"></h3>
+            <div class="editor-actions">
+              <button class="btn danger" id="deleteBtn" onclick="deleteCurrentTemplate()">Delete</button>
+              <button class="btn" onclick="resetToDefaults()">Reset</button>
+              <button class="btn primary" onclick="saveTemplate()">Save</button>
+            </div>
+          </div>
+
+          <!-- Meta -->
+          <div class="meta-row">
+            <div class="field"><label>Name</label><input type="text" id="f_name"></div>
+            <div class="field"><label>Description</label><input type="text" id="f_description"></div>
+          </div>
+
+          <!-- Context Scope -->
+          <div class="config-section">
+            <div class="config-section-title">Context Scope</div>
+            <div class="config-grid cols-3">
+              <div class="field" data-key="caller_depth"><label>Caller Depth</label><input type="number" id="f_caller_depth" min="0" max="3"></div>
+              <div class="field" data-key="callee_depth"><label>Callee Depth</label><input type="number" id="f_callee_depth" min="0" max="3"></div>
+              <div class="field" data-key="max_callers_per_level"><label>Max Callers/Level</label><input type="number" id="f_max_callers_per_level" min="1" max="20"></div>
+              <div class="field" data-key="max_callees_per_level"><label>Max Callees/Level</label><input type="number" id="f_max_callees_per_level" min="1" max="20"></div>
+            </div>
+            <div class="config-grid" style="margin-top:10px">
+              <div class="field" data-key="include_cross_repo"><label>Include Cross-Repo</label>
+                <select id="f_include_cross_repo"><option value="false">No</option><option value="true">Yes</option></select>
+              </div>
+              <div class="field" data-key="include_table_access"><label>Include Table Access</label>
+                <select id="f_include_table_access"><option value="false">No</option><option value="true">Yes</option></select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Code Granularity -->
+          <div class="config-section">
+            <div class="config-section-title">Code Granularity</div>
+            <div class="config-grid cols-3">
+              <div class="field" data-key="target_code"><label>Target Code</label>
+                <select id="f_target_code"><option value="full">Full</option><option value="truncated">Truncated</option><option value="signature_only">Signature Only</option></select>
+              </div>
+              <div class="field" data-key="caller_code"><label>Caller Code</label>
+                <select id="f_caller_code"><option value="full">Full</option><option value="truncated">Truncated</option><option value="signature_only">Signature Only</option><option value="name_only">Name Only</option></select>
+              </div>
+              <div class="field" data-key="callee_code"><label>Callee Code</label>
+                <select id="f_callee_code"><option value="full">Full</option><option value="truncated">Truncated</option><option value="signature_only">Signature Only</option><option value="name_only">Name Only</option></select>
+              </div>
+              <div class="field" data-key="target_max_lines"><label>Target Max Lines</label><input type="number" id="f_target_max_lines" min="10" max="500"></div>
+              <div class="field" data-key="caller_max_lines"><label>Caller Max Lines</label><input type="number" id="f_caller_max_lines" min="10" max="500"></div>
+              <div class="field" data-key="callee_max_lines"><label>Callee Max Lines</label><input type="number" id="f_callee_max_lines" min="10" max="500"></div>
+            </div>
+            <div class="config-grid" style="margin-top:10px">
+              <div class="field" data-key="include_file_context"><label>Include File Context</label>
+                <select id="f_include_file_context"><option value="false">No</option><option value="true">Yes</option></select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Output -->
+          <div class="config-section">
+            <div class="config-section-title">Output Control</div>
+            <div class="config-grid cols-3">
+              <div class="field" data-key="max_decisions"><label>Max Decisions</label><input type="number" id="f_max_decisions" min="1" max="10"></div>
+              <div class="field" data-key="summary_length"><label>Summary Length</label>
+                <select id="f_summary_length"><option value="short">Short (10-25w)</option><option value="medium">Medium (20-50w)</option><option value="long">Long (40-80w)</option></select>
+              </div>
+              <div class="field" data-key="language"><label>Language</label>
+                <select id="f_language"><option value="auto">Auto</option><option value="zh">Chinese</option><option value="en">English</option></select>
+              </div>
+            </div>
+            <div style="margin-top:12px">
+              <label style="font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px">Finding Types</label>
+              <div class="chip-group" style="margin-top:6px" id="findingTypesGroup">
+                <span class="chip" data-val="decision" onclick="toggleChip(this)">Decision</span>
+                <span class="chip" data-val="suboptimal" onclick="toggleChip(this)">Suboptimal</span>
+                <span class="chip" data-val="bug" onclick="toggleChip(this)">Bug</span>
+              </div>
+            </div>
+            <div class="config-grid" style="margin-top:12px">
+              <div class="field" data-key="extract_keywords"><label>Extract Keywords</label>
+                <select id="f_extract_keywords"><option value="true">Yes</option><option value="false">No</option></select>
+              </div>
+              <div class="field" data-key="include_business_context"><label>Include Business Context</label>
+                <select id="f_include_business_context"><option value="true">Yes</option><option value="false">No</option></select>
+              </div>
+            </div>
+          </div>
+
+          <!-- AI -->
+          <div class="config-section">
+            <div class="config-section-title">AI</div>
+            <div class="config-grid cols-3">
+              <div class="field" data-key="timeout_ms"><label>Timeout (ms)</label><input type="number" id="f_timeout_ms" min="10000" max="600000" step="10000"></div>
+              <div class="field" data-key="ai_provider"><label>AI Provider (override)</label><input type="text" id="f_ai_provider" placeholder="leave empty for default"></div>
+              <div class="field" data-key="model"><label>Model (override)</label><input type="text" id="f_model" placeholder="leave empty for default"></div>
+            </div>
+          </div>
+
+          <!-- Prompt -->
+          <div class="config-section">
+            <div class="config-section-title">Prompt</div>
+            <div class="field" data-key="custom_context" style="margin-bottom:10px"><label>Custom Context</label><textarea id="f_custom_context" placeholder="e.g. This is a food delivery platform using Vue 3 + Supabase"></textarea></div>
+            <div class="field" data-key="prompt_template"><label>Prompt Template (advanced)</label><textarea id="f_prompt_template" rows="6" placeholder="Leave empty to use built-in default. Supports {{functionName}}, {{functionCode}}, {{callerSection}}, {{calleeSection}}, {{businessContext}}, {{customContext}}, etc."></textarea></div>
+          </div>
+
+          <!-- CLI hint -->
+          <div style="margin-top:20px;padding:14px 16px;border-radius:var(--radius-sm);background:var(--surface-2);border:1px solid var(--border-subtle)">
+            <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">CLI Usage</div>
+            <code id="cliHint" style="font-family:var(--mono);font-size:12px;color:var(--accent)"></code>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New template dialog -->
+<div class="dialog-overlay" id="newDialog">
+  <div class="dialog">
+    <h4>New Template</h4>
+    <div class="field"><label>Name (kebab-case)</label><input type="text" id="newName" placeholder="my-template"></div>
+    <div class="field"><label>Description</label><input type="text" id="newDesc" placeholder="What this template is for"></div>
+    <div class="field"><label>Extends</label>
+      <select id="newExtends"><option value="_default">_default</option></select>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn" onclick="closeNewDialog()">Cancel</button>
+      <button class="btn primary" onclick="createTemplate()">Create</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/sidebar.js"></script>
+<script>
+const CONFIG_KEYS = [
+  'caller_depth','callee_depth','max_callers_per_level','max_callees_per_level',
+  'include_cross_repo','include_table_access',
+  'target_code','caller_code','callee_code','target_max_lines','caller_max_lines','callee_max_lines',
+  'include_file_context',
+  'max_decisions','summary_length','language','extract_keywords','include_business_context',
+  'timeout_ms','ai_provider','model','custom_context','prompt_template',
+]
+
+const BOOL_FIELDS = ['include_cross_repo','include_table_access','include_file_context','extract_keywords','include_business_context']
+const NUM_FIELDS = ['caller_depth','callee_depth','max_callers_per_level','max_callees_per_level','target_max_lines','caller_max_lines','callee_max_lines','max_decisions','timeout_ms']
+
+let templates = []
+let currentTemplate = null
+let defaultConfig = {}
+let rawData = {}  // raw template file (before merge)
+
+// ── Load ──
+
+async function loadTemplates() {
+  const res = await fetch('/api/templates')
+  const data = await res.json()
+  templates = data.templates || []
+
+  const res2 = await fetch('/api/templates/default-config')
+  const data2 = await res2.json()
+  defaultConfig = data2.config || {}
+
+  renderList()
+}
+
+function renderList() {
+  const el = document.getElementById('templateList')
+  el.innerHTML = templates.map(t => {
+    const active = currentTemplate === t.name ? ' active' : ''
+    const badges = []
+    if (t.name === '_default') badges.push('<span class="badge-default">Built-in</span>')
+    if (t.extends) badges.push(`<span class="badge-extends">extends: ${t.extends}</span>`)
+    return `<div class="tpl-card${active}" onclick="selectTemplate('${t.name}')">
+      <div class="tpl-name">${t.name} ${badges.join(' ')}</div>
+      <div class="tpl-desc">${t.description || ''}</div>
+    </div>`
+  }).join('')
+
+  // Update extends dropdown in new dialog
+  const sel = document.getElementById('newExtends')
+  sel.innerHTML = templates.map(t => `<option value="${t.name}">${t.name}</option>`).join('')
+}
+
+// ── Select ──
+
+async function selectTemplate(name) {
+  currentTemplate = name
+
+  const res = await fetch(`/api/templates/${name}`)
+  const data = await res.json()
+  rawData = data.raw || {}
+  const merged = data.merged || {}
+
+  document.getElementById('emptyState').style.display = 'none'
+  document.getElementById('editorContent').style.display = 'block'
+  document.getElementById('editorTitle').textContent = name
+  document.getElementById('deleteBtn').style.display = name === '_default' ? 'none' : ''
+
+  // Fill meta
+  document.getElementById('f_name').value = rawData.name || name
+  document.getElementById('f_description').value = rawData.description || ''
+
+  // Fill config fields
+  for (const key of CONFIG_KEYS) {
+    const el = document.getElementById('f_' + key)
+    if (!el) continue
+
+    const mergedVal = merged[key]
+    const isOverridden = rawData[key] !== undefined
+
+    if (BOOL_FIELDS.includes(key)) {
+      el.value = String(mergedVal ?? false)
+    } else if (NUM_FIELDS.includes(key)) {
+      el.value = mergedVal ?? ''
+    } else if (el.tagName === 'TEXTAREA') {
+      el.value = mergedVal ?? ''
+    } else if (el.tagName === 'SELECT') {
+      el.value = mergedVal ?? ''
+    } else {
+      el.value = mergedVal ?? ''
+    }
+
+    // Mark overridden vs inherited
+    const field = el.closest('.field')
+    if (field) {
+      field.classList.toggle('overridden', isOverridden && name !== '_default')
+      field.classList.toggle('inherited', !isOverridden && name !== '_default')
+    }
+  }
+
+  // Finding types chips
+  const types = merged.finding_types || ['decision']
+  document.querySelectorAll('#findingTypesGroup .chip').forEach(chip => {
+    chip.classList.toggle('active', types.includes(chip.dataset.val))
+  })
+
+  // CLI hint
+  document.getElementById('cliHint').textContent = `npm run analyze -- --repo <name> --template ${name}`
+
+  renderList()
+}
+
+// ── Toggle chips ──
+
+function toggleChip(el) {
+  el.classList.toggle('active')
+}
+
+// ── Save ──
+
+async function saveTemplate() {
+  if (!currentTemplate) return
+  if (currentTemplate === '_default') {
+    showToast('Cannot edit _default template', true)
+    return
+  }
+
+  const tpl = {
+    name: document.getElementById('f_name').value.trim() || currentTemplate,
+    description: document.getElementById('f_description').value.trim(),
+    extends: rawData.extends || '_default',
+  }
+
+  // Only include fields that differ from default
+  for (const key of CONFIG_KEYS) {
+    const el = document.getElementById('f_' + key)
+    if (!el) continue
+
+    let val
+    if (BOOL_FIELDS.includes(key)) {
+      val = el.value === 'true'
+    } else if (NUM_FIELDS.includes(key)) {
+      val = el.value ? parseInt(el.value) : undefined
+    } else {
+      val = el.value || undefined
+    }
+
+    // Compare with default
+    if (val !== undefined && val !== '' && val !== defaultConfig[key]) {
+      tpl[key] = val
+    }
+  }
+
+  // Finding types
+  const types = []
+  document.querySelectorAll('#findingTypesGroup .chip.active').forEach(c => types.push(c.dataset.val))
+  const defaultTypes = defaultConfig.finding_types || ['decision','suboptimal','bug']
+  if (JSON.stringify(types.sort()) !== JSON.stringify([...defaultTypes].sort())) {
+    tpl.finding_types = types
+  }
+
+  try {
+    const res = await fetch(`/api/templates/${currentTemplate}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tpl),
+    })
+    const data = await res.json()
+    if (data.error) throw new Error(data.error)
+    showToast('Template saved')
+    await loadTemplates()
+    await selectTemplate(currentTemplate)
+  } catch (e) {
+    showToast(e.message, true)
+  }
+}
+
+// ── Delete ──
+
+async function deleteCurrentTemplate() {
+  if (!currentTemplate || currentTemplate === '_default') return
+  if (!confirm(`Delete template "${currentTemplate}"?`)) return
+
+  try {
+    const res = await fetch(`/api/templates/${currentTemplate}`, { method: 'DELETE' })
+    const data = await res.json()
+    if (data.error) throw new Error(data.error)
+    showToast('Template deleted')
+    currentTemplate = null
+    document.getElementById('emptyState').style.display = ''
+    document.getElementById('editorContent').style.display = 'none'
+    await loadTemplates()
+  } catch (e) {
+    showToast(e.message, true)
+  }
+}
+
+// ── Reset ──
+
+function resetToDefaults() {
+  if (!currentTemplate) return
+  selectTemplate(currentTemplate)
+  showToast('Reset to saved values')
+}
+
+// ── New ──
+
+function showNewDialog() {
+  document.getElementById('newDialog').classList.add('open')
+  document.getElementById('newName').value = ''
+  document.getElementById('newDesc').value = ''
+  document.getElementById('newName').focus()
+}
+
+function closeNewDialog() {
+  document.getElementById('newDialog').classList.remove('open')
+}
+
+async function createTemplate() {
+  const name = document.getElementById('newName').value.trim().replace(/[^a-z0-9-]/g, '-')
+  const desc = document.getElementById('newDesc').value.trim()
+  const ext = document.getElementById('newExtends').value
+
+  if (!name) { showToast('Name is required', true); return }
+  if (name === '_default') { showToast('Cannot use _default', true); return }
+
+  const tpl = { name: name, description: desc, extends: ext }
+
+  try {
+    const res = await fetch(`/api/templates/${name}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tpl),
+    })
+    const data = await res.json()
+    if (data.error) throw new Error(data.error)
+    closeNewDialog()
+    showToast('Template created')
+    await loadTemplates()
+    await selectTemplate(name)
+  } catch (e) {
+    showToast(e.message, true)
+  }
+}
+
+// ── Toast ──
+
+function showToast(msg, isError = false) {
+  const el = document.getElementById('toast')
+  el.textContent = msg
+  el.className = 'toast show' + (isError ? ' error' : '')
+  setTimeout(() => el.className = 'toast', 2500)
+}
+
+// ── Init ──
+
+loadTemplates()
+</script>
+</body>
+</html>
