@@ -15,6 +15,8 @@ export interface RepoConfig {
   cpgFile: string
   packages: string[]  // npm package names that map to this repo
   skipEdgeFunctions?: boolean  // true = edge functions 是副本，不是 source of truth
+  language?: string   // Joern language param: javascript, python, java, etc.
+  srcDir?: string     // subdirectory to scan (default: 'src')
 }
 
 export interface ProjectConfig {

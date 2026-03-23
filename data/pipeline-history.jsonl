@@ -1,0 +1,1 @@
+{"startedAt":1774292689792,"finishedAt":1774292713769,"status":"error","phases":["schema","ingest","link","cold-start","sessions","refine","embed"],"goals":[],"duration":23977,"logLines":132,"tokenEstimate":0}

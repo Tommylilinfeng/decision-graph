@@ -680,7 +680,7 @@ function applyFilters() {
   filteredDecisions = allDecisions.filter(d => {
     // Stale filter (special: crosses type boundaries)
     if (activeType === 'stale') {
-      if (d.staleness !== 'stale') return false
+      if (!['stale','code_changed','code_removed'].includes(d.staleness)) return false
     } else {
       // Type filter
       const type = d.finding_type || 'decision'
@@ -709,8 +709,8 @@ function applyFilters() {
     if (sort === 'anchors') return (b.anchors || []).length - (a.anchors || []).length
     if (sort === 'keywords') return (b.keywords || []).length - (a.keywords || []).length
     if (sort === 'stale') {
-      const sa = a.staleness === 'stale' ? 0 : 1
-      const sb = b.staleness === 'stale' ? 0 : 1
+      const sa = ['stale','code_changed','code_removed'].includes(a.staleness) ? 0 : 1
+      const sb = ['stale','code_changed','code_removed'].includes(b.staleness) ? 0 : 1
       return sa - sb || (b.created_at || '').localeCompare(a.created_at || '')
     }
     return 0
@@ -726,7 +726,7 @@ function renderStats() {
   const bugs = allDecisions.filter(d => d.finding_type === 'bug').length
   const suboptimal = allDecisions.filter(d => d.finding_type === 'suboptimal').length
   const anchored = allDecisions.filter(d => (d.anchors || []).length > 0).length
-  const stale = allDecisions.filter(d => d.staleness === 'stale').length
+  const stale = allDecisions.filter(d => ['stale','code_changed','code_removed'].includes(d.staleness)).length
 
   document.getElementById('statsBar').innerHTML = `
     <div class="stat-pill"><div class="dot" style="background:var(--text-secondary)"></div><span class="count">${total}</span><span class="label">total</span></div>
@@ -803,7 +803,9 @@ function renderDecisions() {
   const cards = filteredDecisions.map((d, i) => {
     const type = d.finding_type || 'decision'
     const expanded = expandedIds.has(d.id)
-    const isStale = d.staleness === 'stale'
+    const isStale = ['stale','code_changed','code_removed'].includes(d.staleness)
+    const stalenessLabel = d.staleness === 'code_changed' ? 'Code Changed' : d.staleness === 'code_removed' ? 'Code Removed' : 'Stale'
+    const stalenessColor = d.staleness === 'code_removed' ? 'var(--red)' : 'var(--yellow)'
     const icon = type === 'bug' ? '' : type === 'suboptimal' ? '' : ''
     const sourceLabel = {cold_start:'Cold Start',cold_start_v2:'Cold Start v2',claude_code_session:'Session',manual_business_context:'Business'}[d.source] || d.source
 
@@ -886,7 +888,7 @@ function renderDecisions() {
             <div class="card-summary">${esc(d.summary)}</div>
             <div class="card-meta-row">
               <span class="meta-badge source">${sourceLabel}</span>
-              ${isStale ? '<span class="stale-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Stale</span>' : ''}
+              ${isStale ? `<span class="stale-badge" style="color:${stalenessColor}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>${stalenessLabel}</span>` : ''}
               ${anchorBadge}
               ${kwPreview}
               ${kwMore}

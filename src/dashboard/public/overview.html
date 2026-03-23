@@ -237,13 +237,15 @@ function render(d) {
   var totalDec = t.decisions || 1
   var anchoredPct = t.decisions > 0 ? Math.round((t.anchored / t.decisions) * 100) : 0
   var stalePct = t.decisions > 0 ? Math.round((h.staleDecisions / t.decisions) * 100) : 0
+  var codeChanged = h.codeChangedDecisions || 0
+  var codeRemoved = h.codeRemovedDecisions || 0
   var embedPct = t.decisions > 0 ? Math.round((h.embeddedDecisions / t.decisions) * 100) : 0
   var lastRun = h.lastPipelineRun || h.lastScheduledRun
   var lastRunStr = lastRun ? new Date(lastRun.at || lastRun.startedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : 'Never'
   var lastRunStatus = lastRun ? (lastRun.status || 'done') : 'none'
 
   var healthCards = ''
-    + '<div class="health-card '+(stalePct > 20 ? 'bad' : stalePct > 5 ? 'warn' : 'ok')+'"><div class="health-icon">'+(stalePct > 20 ? '' : stalePct > 5 ? '' : '')+'</div><div class="health-info"><div class="health-value" style="color:'+(stalePct > 20 ? 'var(--red)' : stalePct > 5 ? 'var(--yellow)' : 'var(--green)')+'">'+(h.staleDecisions||0)+'</div><div class="health-label">Stale Decisions ('+stalePct+'%)</div></div></div>'
+    + '<div class="health-card '+(stalePct > 20 ? 'bad' : stalePct > 5 ? 'warn' : 'ok')+'"><div class="health-icon">'+(stalePct > 20 ? '' : stalePct > 5 ? '' : '')+'</div><div class="health-info"><div class="health-value" style="color:'+(stalePct > 20 ? 'var(--red)' : stalePct > 5 ? 'var(--yellow)' : 'var(--green)')+'">'+(h.staleDecisions||0)+'</div><div class="health-label">Stale ('+stalePct+'%)'+(codeChanged?'<span style="margin-left:6px;color:var(--yellow)">'+codeChanged+' changed</span>':'')+(codeRemoved?'<span style="margin-left:6px;color:var(--red)">'+codeRemoved+' removed</span>':'')+'</div></div></div>'
     + '<div class="health-card '+(anchoredPct > 70 ? 'ok' : anchoredPct > 40 ? 'warn' : 'bad')+'"><div class="health-icon">'+(anchoredPct > 70 ? '' : '')+'</div><div class="health-info"><div class="health-value" style="color:'+(anchoredPct > 70 ? 'var(--green)' : anchoredPct > 40 ? 'var(--yellow)' : 'var(--red)')+'">'+anchoredPct+'%</div><div class="health-label">Anchored ('+t.anchored+'/'+t.decisions+')</div></div></div>'
     + '<div class="health-card '+(embedPct > 80 ? 'ok' : embedPct > 30 ? 'warn' : 'bad')+'"><div class="health-icon"></div><div class="health-info"><div class="health-value" style="color:'+(embedPct > 80 ? 'var(--green)' : embedPct > 30 ? 'var(--yellow)' : 'var(--text-dim)')+'">'+embedPct+'%</div><div class="health-label">Embedded ('+(h.embeddedDecisions||0)+'/'+t.decisions+')</div></div></div>'
     + '<div class="health-card '+(h.gapFunctions > 10 ? 'warn' : 'ok')+'"><div class="health-icon"></div><div class="health-info"><div class="health-value" style="color:'+(h.gapFunctions > 10 ? 'var(--yellow)' : 'var(--text-dim)')+'">'+(h.gapFunctions||0)+'</div><div class="health-label">Gap Functions (no decisions)</div></div></div>'

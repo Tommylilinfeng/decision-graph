@@ -30,6 +30,7 @@ interface CodeEntityNode {
   path: string | null
   line_start?: number
   line_end?: number
+  content_hash?: string
 }
 
 interface CallEdge {
@@ -54,6 +55,102 @@ interface UnresolvedCall {
   source_repo: string
   target_package: string
   target_function: string
+}
+
+/**
+ * CPG Diff: compare new CPG with existing graph data.
+ * - Functions removed → decisions marked 'code_removed'
+ * - Functions with changed content_hash → decisions marked 'code_changed'
+ * - Removed CodeEntity nodes get staleness='code_removed' on the node itself
+ */
+async function diffAndMarkDecisions(session: Session, newData: CpgExport): Promise<void> {
+  const repo = newData.repo
+
+  // Get existing function nodes for this repo from Memgraph
+  const existingResult = await session.run(
+    `MATCH (e:CodeEntity {repo: $repo, entity_type: 'function'})
+     RETURN e.id AS id, e.content_hash AS hash`,
+    { repo }
+  )
+
+  if (existingResult.records.length === 0) {
+    console.log('\n📊 CPG Diff: No existing functions in graph (first ingest), skipping diff')
+    return
+  }
+
+  // Build maps
+  const oldFunctions = new Map<string, string>()  // id → content_hash
+  for (const r of existingResult.records) {
+    oldFunctions.set(r.get('id'), r.get('hash') || '')
+  }
+
+  const newFunctions = new Map<string, string>()  // id → content_hash
+  for (const node of newData.nodes) {
+    if (node.entity_type === 'function') {
+      newFunctions.set(node.id, node.content_hash || '')
+    }
+  }
+
+  // Diff
+  const removedIds: string[] = []
+  const changedIds: string[] = []
+
+  for (const [id, oldHash] of oldFunctions) {
+    if (!newFunctions.has(id)) {
+      removedIds.push(id)
+    } else {
+      const newHash = newFunctions.get(id)!
+      // Only compare if both hashes exist (skip if old CPG didn't have hashes)
+      if (oldHash && newHash && oldHash !== newHash) {
+        changedIds.push(id)
+      }
+    }
+  }
+
+  const addedCount = [...newFunctions.keys()].filter(id => !oldFunctions.has(id)).length
+
+  console.log(`\n📊 CPG Diff: ${oldFunctions.size} old → ${newFunctions.size} new functions`)
+  console.log(`   Added: ${addedCount} | Changed: ${changedIds.length} | Removed: ${removedIds.length}`)
+
+  // Mark decisions anchored to removed functions
+  if (removedIds.length > 0) {
+    const result = await session.run(
+      `UNWIND $ids AS fnId
+       MATCH (d:DecisionContext)-[:ANCHORED_TO]->(e:CodeEntity {id: fnId})
+       WHERE d.staleness <> 'code_removed'
+       SET d.staleness = 'code_removed',
+           d.staleness_reason = 'Function removed from codebase',
+           d.staleness_detected_at = $now
+       RETURN count(DISTINCT d) AS cnt`,
+      { ids: removedIds, now: new Date().toISOString() }
+    )
+    const cnt = result.records[0]?.get('cnt')?.toNumber?.() ?? 0
+    if (cnt > 0) console.log(`   ⚠️  ${cnt} decisions marked 'code_removed'`)
+
+    // Also mark the CodeEntity nodes themselves
+    await session.run(
+      `UNWIND $ids AS fnId
+       MATCH (e:CodeEntity {id: fnId})
+       SET e.staleness = 'code_removed'`,
+      { ids: removedIds }
+    )
+  }
+
+  // Mark decisions anchored to changed functions
+  if (changedIds.length > 0) {
+    const result = await session.run(
+      `UNWIND $ids AS fnId
+       MATCH (d:DecisionContext)-[:ANCHORED_TO]->(e:CodeEntity {id: fnId})
+       WHERE d.staleness = 'active'
+       SET d.staleness = 'code_changed',
+           d.staleness_reason = 'Function content changed since decision was extracted',
+           d.staleness_detected_at = $now
+       RETURN count(DISTINCT d) AS cnt`,
+      { ids: changedIds, now: new Date().toISOString() }
+    )
+    const cnt = result.records[0]?.get('cnt')?.toNumber?.() ?? 0
+    if (cnt > 0) console.log(`   ⚠️  ${cnt} decisions marked 'code_changed'`)
+  }
 }
 
 async function ingest(): Promise<void> {
@@ -92,6 +189,26 @@ async function ingest(): Promise<void> {
   try {
     // 0. Project 节点（如果有配置）
     await ensureProjectNode(session, data.repo)
+
+    // 0.5 CPG Diff — detect removed/changed functions, mark decisions
+    await diffAndMarkDecisions(session, data)
+
+    // 1. Clear old code-structure edges for this repo (calls/contains may have changed)
+    console.log('\n🧹 Clearing old CALLS/CONTAINS edges for repo...')
+    await session.run(
+      `MATCH (a:CodeEntity {repo: $repo})-[r:CALLS]->(b) DELETE r`,
+      { repo: data.repo }
+    )
+    await session.run(
+      `MATCH (a:CodeEntity {repo: $repo})-[r:CONTAINS]->(b) DELETE r`,
+      { repo: data.repo }
+    )
+    // Also clean up service-level CONTAINS from Project
+    await session.run(
+      `MATCH (svc:CodeEntity {id: $svcId})<-[r:CONTAINS]-(p:Project) WITH r LIMIT 0 RETURN 1`,
+      { svcId: `svc:${data.repo}` }
+    ).catch(() => {}) // ignore if no Project node
+    console.log('   ✓ Old edges cleared')
 
     // 1. 写入节点
     console.log('\n📁 写入 CodeEntity 节点...')

@@ -65,6 +65,22 @@
             <input type="text" id="repoPackages" placeholder="@scope/name" style="width:100%;padding:8px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:13px;outline:none">
           </div>
         </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Language <span style="font-weight:400;text-transform:none">(Joern)</span></label>
+            <select id="repoLanguage" style="width:100%;padding:8px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--sans);font-size:13px;outline:none;cursor:pointer">
+              <option value="javascript">javascript (JS/TS)</option>
+              <option value="python">python</option>
+              <option value="java">java</option>
+              <option value="c">c</option>
+              <option value="cpp">cpp</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Source Dir <span style="font-weight:400;text-transform:none">(default: src)</span></label>
+            <input type="text" id="repoSrcDir" placeholder="src" style="width:100%;padding:8px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:var(--mono);font-size:13px;outline:none">
+          </div>
+        </div>
         <div style="display:flex;gap:10px;align-items:center">
           <button class="btn-primary" style="width:auto" onclick="addRepo()">Add</button>
           <button class="btn-ghost" onclick="toggleAddRepo()">Cancel</button>
@@ -150,7 +166,7 @@ async function loadSystem(){
       document.getElementById('cfgBadge').className='badge badge-green'
       document.getElementById('cfgBadge').textContent=s.config.repos.length+' repos'
       document.getElementById('cfgInfo').innerHTML=s.config.repos.map(r=>
-        `<div style="display:flex;align-items:center;gap:8px;padding:4px 0"><span class="dot ${r.cpgExists?'dot-green':'dot-red'}"></span><span>${esc(r.name)}</span><span class="badge" style="background:var(--surface-2);color:var(--text-dim)">${r.type}</span>${r.cpgExists?'<span style="color:var(--green);font-size:11px">CPG ready</span>':'<span style="color:var(--red);font-size:11px">CPG missing</span>'}</div>`
+        `<div style="display:flex;align-items:center;gap:8px;padding:4px 0"><span class="dot ${r.cpgExists?'dot-green':'dot-red'}"></span><span>${esc(r.name)}</span><span class="badge" style="background:var(--surface-2);color:var(--text-dim)">${r.type}</span>${r.cpgExists?'<span style="color:var(--green);font-size:11px">CPG ready</span><button class="btn-ghost" style="padding:2px 8px;font-size:11px;margin-left:4px" onclick="generateCpg(\''+esc(r.name)+'\')">↻ Regenerate</button>':`<span style="color:var(--red);font-size:11px">CPG missing</span><button class="btn-ghost" style="padding:2px 8px;font-size:11px;margin-left:4px" onclick="generateCpg('${esc(r.name)}')">Generate CPG</button>`}<span style="font-size:11px;color:var(--text-dim)">${esc(r.language||'js')} · ${esc(r.srcDir||'src')}</span></div>`
       ).join('')
     } else {
       document.getElementById('cfgBadge').className='badge badge-red'
@@ -224,6 +240,8 @@ async function addRepo() {
   const cpgFile = document.getElementById('repoCpg').value.trim() || undefined
   const packagesRaw = document.getElementById('repoPackages').value.trim()
   const packages = packagesRaw ? packagesRaw.split(',').map(s => s.trim()).filter(Boolean) : []
+  const language = document.getElementById('repoLanguage').value
+  const srcDir = document.getElementById('repoSrcDir').value.trim() || 'src'
   const msg = document.getElementById('addRepoMsg')
 
   if (!name || !repoPath) {
@@ -236,7 +254,7 @@ async function addRepo() {
     const res = await fetch('/api/repos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, repoPath, type, cpgFile, packages })
+      body: JSON.stringify({ name, repoPath, type, cpgFile, packages, language, srcDir })
     })
     const data = await res.json()
     if (!res.ok) {
@@ -274,6 +292,43 @@ fetch('/api/pipeline/ai-config').then(r=>r.json()).then(d=>{
   if(d.apiKey) document.getElementById('sysAiApiKey').value='********'
   document.getElementById('sysApiKeyGroup').style.display=d.provider==='anthropic-api'?'':'none'
 }).catch(()=>{})
+
+let cpgES=null
+async function generateCpg(repo){
+  const logEl=document.getElementById('setupLog')
+  const badge=document.getElementById('setupBadge')
+  logEl.innerHTML=''
+  badge.style.display='inline-block'
+  badge.className='badge badge-yellow'
+  badge.textContent='generating CPG...'
+
+  try {
+    const res=await fetch('/api/system/generate-cpg',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({repo})
+    })
+    if(!res.ok){const e=await res.json();logEl.textContent='Error: '+(e.error||'Failed');badge.className='badge badge-red';badge.textContent='error';return}
+
+    if(cpgES) cpgES.close()
+    cpgES=new EventSource('/api/system/cpg/stream')
+    cpgES.addEventListener('log',e=>{
+      const div=document.createElement('div')
+      div.textContent=e.data
+      if(e.data.includes('\u2713')) div.style.color='var(--green)'
+      else if(e.data.includes('\u274c')) div.style.color='var(--red)'
+      else if(e.data.includes('\u2501')){div.style.color='var(--accent)';div.style.fontWeight='700'}
+      logEl.appendChild(div)
+      logEl.scrollTop=logEl.scrollHeight
+    })
+    cpgES.addEventListener('status',e=>{
+      badge.className='badge '+(e.data==='done'?'badge-green':'badge-red')
+      badge.textContent=e.data==='done'?'CPG done':e.data
+      cpgES.close();cpgES=null
+      loadSystem()
+    })
+    cpgES.onerror=()=>{badge.className='badge badge-red';badge.textContent='error';cpgES.close();cpgES=null}
+  } catch(e){logEl.textContent=e.message;badge.className='badge badge-red';badge.textContent='error'}
+}
 
 async function saveSysAI(){
   const body={provider:document.getElementById('sysAiProvider').value}

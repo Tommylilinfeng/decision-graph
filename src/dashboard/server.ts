@@ -200,7 +200,13 @@ app.get('/api/overview', async (c) => {
 
     // 10. Health indicators
     const staleCount = await session.run(
-      `MATCH (d:DecisionContext) WHERE d.staleness = 'stale' RETURN count(d) AS cnt`
+      `MATCH (d:DecisionContext) WHERE d.staleness IN ['stale', 'code_changed', 'code_removed'] RETURN count(d) AS cnt`
+    )
+    const codeChangedCount = await session.run(
+      `MATCH (d:DecisionContext) WHERE d.staleness = 'code_changed' RETURN count(d) AS cnt`
+    )
+    const codeRemovedCount = await session.run(
+      `MATCH (d:DecisionContext) WHERE d.staleness = 'code_removed' RETURN count(d) AS cnt`
     )
     let embeddedCnt = 0, relEdgeCnt = 0, gapFnCnt = 0
     try {
@@ -240,6 +246,8 @@ app.get('/api/overview', async (c) => {
       },
       health: {
         staleDecisions: num(staleCount.records[0]?.get('cnt')),
+        codeChangedDecisions: num(codeChangedCount.records[0]?.get('cnt')),
+        codeRemovedDecisions: num(codeRemovedCount.records[0]?.get('cnt')),
         embeddedDecisions: embeddedCnt,
         relationshipEdges: relEdgeCnt,
         gapFunctions: gapFnCnt,
@@ -404,9 +412,9 @@ app.get('/api/repos', async (c) => {
 app.post('/api/repos', async (c) => {
   try {
     const body = await c.req.json()
-    const { name, repoPath, type, cpgFile, packages, skipEdgeFunctions } = body
+    const { name, repoPath, type, cpgFile, packages, skipEdgeFunctions, language, srcDir } = body
     if (!name || !repoPath || !type) {
-      return c.json({ error: 'name, repoPath, and type are required' }, 400)
+    return c.json({ error: 'name, repoPath, and type are required' }, 400)
     }
 
     const configPath = path.resolve(__dirname, '../../ckg.config.json')
@@ -415,17 +423,19 @@ app.post('/api/repos', async (c) => {
 
     // Check for duplicate name
     if (raw.repos.some((r: any) => r.name === name)) {
-      return c.json({ error: `Repo "${name}" already exists` }, 409)
+    return c.json({ error: `Repo "${name}" already exists` }, 409)
     }
 
     const newRepo: any = {
-      name,
-      path: repoPath,
-      type,
-      cpgFile: cpgFile || `data/${name}.json`,
-      packages: packages || [],
-    }
-    if (skipEdgeFunctions) newRepo.skipEdgeFunctions = true
+    name,
+    path: repoPath,
+    type,
+    cpgFile: cpgFile || `data/${name}.json`,
+    packages: packages || [],
+      language: language || 'javascript',
+      srcDir: srcDir || 'src',
+  }
+  if (skipEdgeFunctions) newRepo.skipEdgeFunctions = true
 
     raw.repos.push(newRepo)
     fs.writeFileSync(configPath, JSON.stringify(raw, null, 2))
@@ -891,6 +901,9 @@ app.get('/api/system/status', async (c) => {
         type: r.type,
         cpgFile: r.cpgFile,
         cpgExists: fs.existsSync(path.resolve(__dirname, '../..', r.cpgFile)),
+        language: r.language || 'javascript',
+        srcDir: r.srcDir || 'src',
+        repoPath: r.path,
       })),
     }
   } catch (e: any) {
@@ -1107,6 +1120,155 @@ app.get('/api/system/run/stream', (c) => {
 
 app.get('/api/system/run/status', (c) => {
   return c.json({ status: setupJob.status, command: setupJob.command, logCount: setupJob.logs.length })
+})
+
+// ── CPG Generation (Joern) ──────────────────────────────
+
+interface CpgJob {
+  process: ChildProcess | null
+  status: 'idle' | 'running' | 'done' | 'error'
+  repo: string
+  logs: string[]
+  startedAt: number
+}
+
+const cpgJob: CpgJob = {
+  process: null,
+  status: 'idle',
+  repo: '',
+  logs: [],
+  startedAt: 0,
+}
+
+app.post('/api/system/generate-cpg', async (c) => {
+  if (cpgJob.status === 'running') {
+    return c.json({ error: 'CPG generation already running' }, 409)
+  }
+
+  const body = await c.req.json()
+  const { repo } = body
+  if (!repo) return c.json({ error: 'repo is required' }, 400)
+
+  const config = loadConfig()
+  const repoConfig = config.repos.find(r => r.name === repo)
+  if (!repoConfig) return c.json({ error: `Repo "${repo}" not found in config` }, 404)
+
+  const projectRoot = path.resolve(__dirname, '../..')
+  const language = repoConfig.language || 'javascript'
+  const srcDir = repoConfig.srcDir || 'src'
+  const srcPath = path.resolve(repoConfig.path, srcDir)
+  const cpgBinPath = path.resolve(projectRoot, 'data', `${repo}.cpg.bin`)
+  const cpgJsonPath = path.resolve(projectRoot, repoConfig.cpgFile)
+  const joernScript = path.resolve(projectRoot, 'joern/extract-code-entities.sc')
+
+  // Verify source directory exists
+  if (!fs.existsSync(srcPath)) {
+    return c.json({ error: `Source directory not found: ${srcPath}` }, 400)
+  }
+
+  // Reset state
+  cpgJob.status = 'running'
+  cpgJob.repo = repo
+  cpgJob.logs = []
+  cpgJob.startedAt = Date.now()
+
+  const addLog = (line: string) => {
+    if (line.trim()) cpgJob.logs.push(line)
+  }
+
+  // Step 1: joern-parse → .cpg.bin
+  // Step 2: joern --script → .json
+  const steps = [
+    {
+      label: `joern-parse (${language})`,
+      cmd: 'joern-parse',
+      args: [srcPath, '--output', cpgBinPath, '--language', language],
+    },
+    {
+      label: 'Extract code entities',
+      cmd: 'joern',
+      args: [
+        '--script', joernScript,
+        '--param', `cpgFile=${cpgBinPath}`,
+        '--param', `outFile=${cpgJsonPath}`,
+        '--param', `repoName=${repo}`,
+      ],
+    },
+  ]
+
+  const runStep = (idx: number) => {
+    if (idx >= steps.length) {
+      cpgJob.status = 'done'
+      addLog('\n✅ CPG generation complete')
+      addLog(`Output: ${cpgJsonPath}`)
+      cpgJob.process = null
+      return
+    }
+
+    const step = steps[idx]
+    addLog(`\n━━ [${idx + 1}/${steps.length}] ${step.label} ━━`)
+
+    const child = spawn(step.cmd, step.args, {
+      cwd: projectRoot,
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+
+    cpgJob.process = child
+
+    child.stdout?.on('data', (data: Buffer) => {
+      data.toString().split('\n').forEach(line => { if (line.trim()) addLog(line) })
+    })
+    child.stderr?.on('data', (data: Buffer) => {
+      data.toString().split('\n').forEach(line => { if (line.trim()) addLog(line) })
+    })
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        addLog(`✓ ${step.label} done`)
+        runStep(idx + 1)
+      } else {
+        cpgJob.status = 'error'
+        addLog(`❌ ${step.label} failed (exit ${code})`)
+        cpgJob.process = null
+      }
+    })
+
+    child.on('error', (err) => {
+      cpgJob.status = 'error'
+      addLog(`❌ ${step.label}: ${err.message}`)
+      if (err.message.includes('ENOENT')) {
+        addLog('Joern not found. Install: https://docs.joern.io/installation')
+      }
+      cpgJob.process = null
+    })
+  }
+
+  runStep(0)
+  return c.json({ status: 'started', repo, language, srcDir })
+})
+
+app.get('/api/system/cpg/stream', (c) => {
+  return streamSSE(c, async (stream) => {
+    let lastIdx = 0
+    let done = false
+    while (!done) {
+      while (lastIdx < cpgJob.logs.length) {
+        await stream.writeSSE({ data: cpgJob.logs[lastIdx], event: 'log' })
+        lastIdx++
+      }
+      if (cpgJob.status !== 'running' && lastIdx >= cpgJob.logs.length) {
+        await stream.writeSSE({ data: cpgJob.status, event: 'status' })
+        done = true
+        break
+      }
+      await new Promise(resolve => setTimeout(resolve, 300))
+    }
+  })
+})
+
+app.get('/api/system/cpg/status', (c) => {
+  return c.json({ status: cpgJob.status, repo: cpgJob.repo, logCount: cpgJob.logs.length })
 })
 
 // ── Pipeline Configuration API ──────────────────────────
@@ -1339,7 +1501,7 @@ app.post('/api/scan/start', async (c) => {
     scanJob.process = null
   })
 
-  return c.json({ status: 'started', directory })
+  return c.json({ status: 'started', repo })
 })
 
 app.get('/api/scan/stream', (c) => {
