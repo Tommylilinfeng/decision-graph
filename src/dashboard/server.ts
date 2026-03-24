@@ -10,7 +10,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { streamSSE } from 'hono/streaming'
 import { getSession, verifyConnectivity } from '../db/client'
-import { loadConfig, clearConfigCache } from '../config'
+import { loadConfig, clearConfigCache, getAnalysisConfig } from '../config'
 import { spawn, ChildProcess } from 'child_process'
 import fs from 'fs'
 import path from 'path'
@@ -1559,8 +1559,10 @@ const job: PipelineJob = {
 app.get('/api/cold-start/config', (c) => {
   try {
     const config = loadConfig()
+    const analysis = getAnalysisConfig()
     return c.json({
       repos: config.repos.map(r => ({ name: r.name, type: r.type })),
+      analysis,
     })
   } catch {
     return c.json({ repos: [] })
@@ -3020,6 +3022,12 @@ app.get('/scan', (c) => {
 
 app.get('/run', (c) => {
   const htmlPath = path.resolve(__dirname, 'public', 'run.html')
+  const html = fs.readFileSync(htmlPath, 'utf-8')
+  return c.html(html)
+})
+
+app.get('/group', (c) => {
+  const htmlPath = path.resolve(__dirname, 'public', 'group.html')
   const html = fs.readFileSync(htmlPath, 'utf-8')
   return c.html(html)
 })

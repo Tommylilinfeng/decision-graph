@@ -1,19 +1,20 @@
 /**
  * cold-start-v2.ts
  *
- * Four-round pipeline:
+ * Three-round analysis pipeline:
  *   Round 1 — Scope Selection: LLM picks relevant files for a goal
  *   Round 2 — Triage: per-file, identify functions worth deep analysis
  *   Round 3 — Deep Analysis: per-function, extract decisions with full caller/callee context
- *   Round 4 — Relationships: normalize keywords, build PENDING edges, then connect decisions (via building blocks)
+ *
+ * Grouping and relationship connection are separate phases (npm run connect).
  *
  * Usage:
- *   npm run cold-start:v2 -- --goal "订单流程和支付" --repo biteme-shared --owner me
- *   npm run cold-start:v2 -- --goal "coupon系统" --concurrency 3
+ *   npm run cold-start:v2 -- --goal "order flow and payment" --repo biteme-shared --owner me
+ *   npm run cold-start:v2 -- --goal "coupon system" --concurrency 3
  */
 
 import { getSession, verifyConnectivity, closeDriver } from '../db/client'
-import { loadConfig } from '../config'
+import { loadConfig, getAnalysisConfig } from '../config'
 import {
   FileEntry, FunctionTriageEntry,
 } from '../prompts/cold-start'
@@ -29,8 +30,7 @@ import {
   extractFunctionCode, readFullFile, buildCallerCalleeCodes,
   batchWriteDecisions, deleteOldDecisions,
 } from './shared'
-import { normalizeKeywords } from './normalize-keywords'
-import { createPendingEdges, connectDecisions } from './connect-decisions'
+import { createPendingEdges } from './connect-decisions'
 
 // ── CLI ──────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ const deepCheck   = args.includes('--deep-check')
 const budgetStr   = getArg('--budget')
 
 if (!goal) {
-  console.error('Usage: npm run cold-start:v2 -- --goal "目标描述" [--repo name] [--owner me] [--concurrency 2] [--budget 500000] [--dry-run]')
+  console.error('Usage: npm run cold-start:v2 -- --goal "goal description" [--repo name] [--owner me] [--concurrency 2] [--budget 500000] [--dry-run]')
   process.exit(1)
 }
 
@@ -101,7 +101,7 @@ function checkDependencyChanges(
 // ── Budget-aware AI call ────────────────────────────────
 
 class BudgetExceededError extends Error {
-  constructor(summary: string) { super(`⚠️ Budget exhausted (${summary})，stopping pipeline`) }
+  constructor(summary: string) { super(`Budget exhausted (${summary}), stopping pipeline`) }
 }
 
 function trackBudget(ai: ReturnType<typeof createAIProvider>, budget: BudgetManager | null): void {
@@ -117,6 +117,7 @@ function trackBudget(ai: ReturnType<typeof createAIProvider>, budget: BudgetMana
 async function main(): Promise<void> {
   const startTime = Date.now()
   const config = loadConfig()
+  const analysisConfig = getAnalysisConfig()
   const repos = targetRepo
     ? config.repos.filter(r => r.name === targetRepo)
     : config.repos
@@ -131,15 +132,16 @@ async function main(): Promise<void> {
   const prompts = createCustomPromptBuilders('cold-start')
   const budget = parseBudget(budgetStr, ai.rateLimit)
 
-  console.log(`\n🧊 Cold-start v2`)
+  console.log(`\n🧊 Cold-start v2 (analysis only)`)
   console.log(`   Goal: "${goal}"`)
   console.log(`   AI: ${ai.name}${config.ai?.model ? ' (' + config.ai.model + ')' : ''}`)
   console.log(`   Repos: ${repos.map(r => r.name).join(', ')}`)
+  console.log(`   Analysis: summary ~${analysisConfig.summaryWords} words, content ~${analysisConfig.contentWords} words`)
   if (budget) console.log(`   Budget: ${budget.summary()}`)
   console.log(`   Concurrency: ${concurrency}`)
   if (force) console.log(`   FORCE mode: re-analyzing all files`)
   if (deepCheck) console.log(`   DEEP CHECK: also re-analyze when callers change`)
-  if (dryRun) console.log(`   ⚠️  DRY RUN — no writes to Memgraph`)
+  if (dryRun) console.log(`   DRY RUN — no writes to Memgraph`)
   console.log()
 
   const state = loadState()
@@ -291,7 +293,6 @@ async function main(): Promise<void> {
             return []
           }
 
-          // Get per-function callers/callees for triage
           const perFnDeps = await getPerFunctionDeps(session, fileInfo.filePath, repoConfig.name)
 
           const triageEntries: FunctionTriageEntry[] = fileInfo.functions.map(fn => ({
@@ -309,7 +310,6 @@ async function main(): Promise<void> {
             const worthy = parseJsonSafe<string[]>(raw, [])
             if (!Array.isArray(worthy)) return []
 
-            // Map names back to full function info
             const results: WorthyFunction[] = []
             for (const fnName of worthy) {
               const fnInfo = fileInfo.functions.find(f => f.name === fnName)
@@ -363,7 +363,6 @@ async function main(): Promise<void> {
 
       if (allWorthyFunctions.length === 0) {
         console.log(`  No functions worth analyzing in this repo`)
-        // Still track files as analyzed (with 0 decisions) so we don't re-triage
         for (const fi of filesToAnalyze) {
           analyzedFiles.push({ repo: repoConfig.name, filePath: fi.filePath, decisionIds: [], commit: headCommit })
         }
@@ -380,21 +379,20 @@ async function main(): Promise<void> {
         allWorthyFunctions,
         concurrency,
         async (wf) => {
-          // Extract target function code
           const fnCode = extractFunctionCode(repoConfig.path, wf.filePath, wf.lineStart, wf.lineEnd)
           if (!fnCode) {
             console.log(`    ✗ ${wf.name} — could not extract code`)
             return []
           }
 
-          // Get callers/callees with full code
           const { callerCodes, calleeCodes } = await buildCallerCalleeCodes(
             session, wf.name, wf.filePath, wf.repo, repoConfig.path
           )
 
           const prompt = prompts.deepAnalysis(
             wf.name, fnCode, wf.filePath,
-            callerCodes, calleeCodes, bizCtx, goal!
+            callerCodes, calleeCodes, bizCtx, goal!,
+            analysisConfig
           )
 
           try {
@@ -493,42 +491,11 @@ async function main(): Promise<void> {
       console.log(`  📋 Classified: ${normal} decisions, ${suboptimal} suboptimal, ${bugs} bugs`)
       if (bugs > 0) console.log(`  🐛 ${bugs} potential bug(s) found!`)
       if (suboptimal > 0) console.log(`  ⚡ ${suboptimal} suboptimal pattern(s) found`)
-    }
 
-    // ─── Round 4: Normalize + Connect (using building blocks) ───
-
-    if (allDecisions.length >= 2) {
-      console.log(`\n  \x1b[36m🔗 Round 4: Relationships\x1b[0m`)
-
-      // 4a. Keyword normalization (before connecting, improves grouping)
-      try {
-        await normalizeKeywords(session, ai, { verbose: true })
-        trackBudget(ai, budget)
-      } catch (err: any) {
-        if (err instanceof BudgetExceededError) throw err
-        console.log(`    ⚠️ Keyword normalization failed: ${err.message}`)
-      }
-
-      // 4b. Build PENDING edges (new decisions vs all existing)
+      // Create PENDING edges for later grouping (npm run connect)
       const newIds = allDecisions.map(d => d.id)
       await createPendingEdges(session, newIds, { verbose: true })
-
-      // 4c. Process PENDING edges (grouping + relationship analysis)
-      try {
-        const connectResult = await connectDecisions({
-          dbSession: session,
-          ai,
-          budget,
-          batchCapacity: 50,
-          concurrency,
-        })
-        console.log(`    📝 ${connectResult.edgesCreated} relationship edges, ${connectResult.pendingProcessed} PENDING edges processed`)
-      } catch (err: any) {
-        if (err instanceof BudgetExceededError) throw err
-        console.log(`    ⚠️ Relationship connection failed: ${err.message}`)
-      }
-    } else {
-      console.log(`\n  ○ Skipping Round 4 (need ≥2 decisions for relationship analysis)`)
+      console.log(`  🔗 PENDING edges created — run 'npm run connect' to process relationships`)
     }
 
     // ─── Save state ─────────────────────────────────────
@@ -553,8 +520,8 @@ async function main(): Promise<void> {
     const { totalUsage } = ai
     const totalTokens = totalUsage.input_tokens + totalUsage.output_tokens
     console.log(`\n✅ Cold-start v2 complete: ${allDecisions.length} decisions (${totalTime}s)`)
-    console.log(`   📊 Token 用量: input ${totalUsage.input_tokens.toLocaleString()} + output ${totalUsage.output_tokens.toLocaleString()} = ${totalTokens.toLocaleString()} total`)
-    if (budget) console.log(`   📊 预算: ${budget.summary()}`)
+    console.log(`   📊 Tokens: input ${totalUsage.input_tokens.toLocaleString()} + output ${totalUsage.output_tokens.toLocaleString()} = ${totalTokens.toLocaleString()} total`)
+    if (budget) console.log(`   📊 Budget: ${budget.summary()}`)
     console.log()
 
   } finally {
@@ -566,11 +533,11 @@ async function main(): Promise<void> {
 main().catch(err => {
   if (err instanceof BudgetExceededError) {
     console.log(err.message)
-    console.log('管线已在预算内安全停止。已完成的工作已保存。')
+    console.log('Pipeline stopped safely within budget. Completed work has been saved.')
     closeDriver()
     process.exit(0)
   }
-  console.error('失败:', err.message)
+  console.error('Failed:', err.message)
   closeDriver()
   process.exit(1)
 })

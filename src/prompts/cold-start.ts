@@ -1,14 +1,16 @@
 /**
  * cold-start prompt templates
  *
- * Four rounds + keyword normalization:
+ * Three analysis rounds + keyword normalization + grouping/relationships:
  *   Round 1 — Scope Selection: pick relevant files for a goal
  *   Round 2 — Triage: per-file, identify functions worth deep analysis
  *   Round 3 — Deep Analysis: per-function, extract decisions with full caller/callee context
- *   Round 4a — Grouping: cluster related decisions for relationship analysis
- *   Round 4b — Relationships: per-group, determine edge types (CAUSED_BY, DEPENDS_ON, etc.)
- *   Keyword Normalization: merge synonyms across all decisions
+ *   Grouping — cluster related decisions for relationship analysis (separate phase)
+ *   Relationships — per-group, determine edge types (separate phase)
+ *   Keyword Normalization — merge synonyms across all decisions (separate phase)
  */
+
+import { AnalysisConfig } from '../config'
 
 // ─── Shared types ────────────────────────────────────────────────────────────
 
@@ -128,8 +130,11 @@ export function buildDeepAnalysisPrompt(
   callers: CallerCalleeCode[],
   callees: CallerCalleeCode[],
   businessContext: BusinessContext[],
-  goal: string
+  goal: string,
+  analysisConfig: AnalysisConfig
 ): string {
+  const { summaryWords, contentWords } = analysisConfig
+
   const callerSection = callers.length > 0
     ? `\n## Functions that CALL ${fnName} (upstream — why they need this function):\n${callers.map(c =>
         `### ${c.filePath}::${c.name}\n\`\`\`\n${c.code}\n\`\`\``
@@ -147,6 +152,8 @@ export function buildDeepAnalysisPrompt(
     : ''
 
   return `You are doing a deep analysis of a single function to extract design decisions.
+
+**You MUST respond entirely in English. All summaries, content, and keywords must be in English.**
 
 GOAL: "${goal}"
 ${bizSection}
@@ -192,8 +199,8 @@ Return ONLY a raw JSON array. Empty array [] if no decisions worth recording:
 [{
   "function": "${fnName}",
   "related_functions": ["otherFunc1", "otherFunc2"],
-  "summary": "20-50 words — state the decision with enough context for someone to understand without seeing the code",
-  "content": "200-600 chars explaining WHY, trade-offs, alternatives considered",
+  "summary": "around ${summaryWords} words — state the decision with enough context for someone to understand without seeing the code",
+  "content": "around ${contentWords} words explaining WHY, trade-offs, alternatives considered",
   "keywords": ["keyword1", "keyword2", "keyword3"],
   "finding_type": "decision|suboptimal|bug",
   "critique": "only for suboptimal/bug — what's wrong and what should it be"
@@ -202,7 +209,8 @@ Return ONLY a raw JSON array. Empty array [] if no decisions worth recording:
 IMPORTANT:
 - "related_functions" lists OTHER functions (callers, callees, or same-file) affected by this decision.
 - "finding_type" defaults to "decision". Only use "suboptimal"/"bug" with clear evidence.
-- "critique" is required for suboptimal/bug, omit entirely for decision.`
+- "critique" is required for suboptimal/bug, omit entirely for decision.
+- All output MUST be in English.`
 }
 
 // ─── Round 4a: Relationship Triage (grouping) ──────────────────────────────
@@ -217,7 +225,7 @@ export interface DecisionSummaryForGrouping {
 
 export function buildGroupingPrompt(
   decisions: DecisionSummaryForGrouping[],
-  cpgHints: string[],  // e.g. ["createOrder CALLS formatCartItems", "applyCoupon CALLS validateCoupon"]
+  cpgHints: string[],
 ): string {
   const decisionList = decisions.map((d, i) =>
     `  ${i + 1}. [${d.id}] ${d.file}::${d.function}\n     ${d.summary}\n     Keywords: ${d.keywords.join(', ')}`
@@ -228,6 +236,8 @@ export function buildGroupingPrompt(
     : ''
 
   return `You are analyzing relationships between design decisions extracted from a codebase.
+
+**You MUST respond entirely in English.**
 
 ## All decisions:
 ${decisionList}
@@ -274,6 +284,8 @@ export function buildRelationshipPrompt(
 
   return `You are determining the exact relationships between a group of related design decisions.
 
+**You MUST respond entirely in English.**
+
 Group context: ${groupReason}
 
 ## Decisions in this group:
@@ -312,18 +324,20 @@ export function buildKeywordNormalizationPrompt(allKeywords: string[]): string {
   const unique = [...new Set(allKeywords)].sort()
   return `You are normalizing keywords extracted from design decisions in a codebase.
 
+**You MUST respond entirely in English.**
+
 Here are all unique keywords currently in use:
 ${unique.map(k => `  - ${k}`).join('\n')}
 
 ## Task
 
-Find groups of keywords that refer to the same concept but use different terms (synonyms, translations, abbreviations). For each group, pick the best canonical form.
+Find groups of keywords that refer to the same concept but use different terms (synonyms, translations, abbreviations). For each group, pick the best canonical form in English.
 
 Rules:
 - Only group keywords that truly mean the same thing in this codebase context
-- Chinese and English terms for the same concept should be grouped (e.g. "authentication" and "auth")
+- Non-English terms should be normalized to their English equivalent (e.g. "认证" → "authentication")
 - Abbreviations should be grouped with full forms (e.g. "tx" and "transaction")
-- Do NOT group keywords that are merely related (e.g. "订单" and "支付" are related but not synonyms)
+- Do NOT group keywords that are merely related (e.g. "order" and "payment" are related but not synonyms)
 
 Return ONLY raw JSON (no markdown, no backticks):
 [

@@ -5,7 +5,8 @@
  *   Phase 0 — Preprocess: parse JSONL → compressed turns + touchedFiles
  *   Phase 1 — Segment: LLM splits conversation into logical segments (user approves)
  *   Phase 2 — Extract: per approved segment, deep decision extraction + anchoring
- *            + Round 4: relationship edges + keyword normalization
+ *
+ * Grouping and relationship connection are separate phases (npm run connect).
  *
  * Usage:
  *   npm run ingest:sessions:v2                                    # all new sessions
@@ -22,7 +23,7 @@ import path from 'path'
 import os from 'os'
 import readline from 'readline'
 import { getSession, verifyConnectivity, closeDriver } from '../db/client'
-import { loadConfig } from '../config'
+import { loadConfig, getAnalysisConfig } from '../config'
 import { createAIProvider } from '../ai'
 import {
   PendingDecision,
@@ -39,10 +40,8 @@ import {
   buildSegmentationPrompt, buildExtractionPrompt,
   SessionSegment,
 } from '../prompts/session'
-import {
-  buildGroupingPrompt, buildRelationshipPrompt, buildKeywordNormalizationPrompt,
-  DecisionSummaryForGrouping, DecisionFullContent, BusinessContext,
-} from '../prompts/cold-start'
+import { BusinessContext } from '../prompts/cold-start'
+import { createPendingEdges } from './connect-decisions'
 import { Session } from 'neo4j-driver'
 
 // ── Constants ───────────────────────────────────────────
@@ -238,8 +237,9 @@ async function runPhase2(
   ai: ReturnType<typeof createAIProvider>,
   jsonlPath: string
 ): Promise<PendingDecision[]> {
+  const analysisConfig = getAnalysisConfig()
+
   // get raw conversation for this segment
-  // NOTE: startTurn/endTurn are compressed turn indices, not JSONL line numbers
   const rawConversation = extractRawTurnsForSegment(
     jsonlPath, phase0.turns, segment.startTurn, segment.endTurn
   )
@@ -269,8 +269,8 @@ async function runPhase2(
 
       // build caller/callee code for the most important functions
       const callerCalleeParts: string[] = []
-      for (const file of relevantFiles.slice(0, 3)) { // limit to top 3 files
-        for (const fn of file.functions.slice(0, 3)) { // limit to top 3 functions per file
+      for (const file of relevantFiles.slice(0, 3)) {
+        for (const fn of file.functions.slice(0, 3)) {
           try {
             const { callerCodes, calleeCodes } = await buildCallerCalleeCodes(
               dbSession, fn.name, file.filePath, file.repo, repoConfig.path
@@ -302,7 +302,8 @@ async function runPhase2(
     rawConversation,
     codeStructureSection,
     callerCalleeSection,
-    bizCtx
+    bizCtx,
+    analysisConfig
   )
 
   const raw = await ai.call(prompt)
@@ -354,148 +355,6 @@ async function runPhase2(
     })
 }
 
-// ── Round 4: Relationships + Keywords ───────────────────
-
-async function runRound4(
-  allDecisions: PendingDecision[],
-  dbSession: Session,
-  ai: ReturnType<typeof createAIProvider>
-): Promise<void> {
-  if (allDecisions.length < 2) {
-    console.log(`\n  ○ Skipping Round 4 (need ≥2 decisions)`)
-    return
-  }
-
-  console.log(`\n  🔗 Round 4: Relationships`)
-
-  // 4a: Grouping
-  const summaries: DecisionSummaryForGrouping[] = allDecisions.map(d => ({
-    id: d.id,
-    function: d.functionName,
-    file: d.filePath,
-    summary: d.props.summary,
-    keywords: d.props.keywords,
-  }))
-
-  // CPG hints
-  const cpgHints: string[] = []
-  try {
-    const fnNames = allDecisions.map(d => d.functionName).filter(Boolean)
-    if (fnNames.length >= 2) {
-      const cpgResult = await dbSession.run(
-        `MATCH (caller:CodeEntity {entity_type: 'function'})-[:CALLS]->(callee:CodeEntity {entity_type: 'function'})
-         WHERE caller.name IN $names AND callee.name IN $names AND caller.name <> callee.name
-         RETURN DISTINCT caller.name + ' CALLS ' + callee.name AS hint
-         LIMIT 50`,
-        { names: fnNames }
-      )
-      for (const r of cpgResult.records) {
-        cpgHints.push(r.get('hint') as string)
-      }
-    }
-  } catch {}
-
-  try {
-    const groupPrompt = buildGroupingPrompt(summaries, cpgHints)
-    const rawGroups = await ai.call(groupPrompt)
-    const groups = parseJsonSafe<{ group: string[]; reason: string }[]>(rawGroups, [])
-
-    if (Array.isArray(groups) && groups.length > 0) {
-      console.log(`    ✓ ${groups.length} groups identified`)
-
-      // 4b: Relationship edges per group
-      let totalEdges = 0
-      for (let gi = 0; gi < groups.length; gi++) {
-        const group = groups[gi]
-        process.stdout.write(`    Group ${gi + 1}/${groups.length}: ${group.reason.slice(0, 60)}...`)
-        const groupDecisions: DecisionFullContent[] = []
-        for (const id of group.group) {
-          const d = allDecisions.find(ad => ad.id === id)
-          if (d) {
-            groupDecisions.push({
-              id: d.id,
-              function: d.functionName,
-              file: d.filePath,
-              summary: d.props.summary,
-              content: d.props.content,
-              keywords: d.props.keywords,
-            })
-          }
-        }
-        if (groupDecisions.length < 2) {
-          console.log(` skipped (< 2 decisions)`)
-          continue
-        }
-
-        try {
-          const relPrompt = buildRelationshipPrompt(groupDecisions, group.reason)
-          const rawRel = await ai.call(relPrompt)
-          const result = parseJsonSafe<{ edges: any[] }>(rawRel, { edges: [] })
-          const edges = Array.isArray(result.edges) ? result.edges : []
-
-          let groupEdges = 0
-          for (const edge of edges) {
-            const edgeType = String(edge.type).toUpperCase()
-            const allowed = ['CAUSED_BY', 'DEPENDS_ON', 'CONFLICTS_WITH', 'CO_DECIDED']
-            if (!allowed.includes(edgeType) || !edge.from || !edge.to) continue
-            try {
-              await dbSession.run(
-                `MATCH (a:DecisionContext {id: $from})
-                 MATCH (b:DecisionContext {id: $to})
-                 MERGE (a)-[r:${edgeType}]->(b)
-                 SET r.reason = $reason`,
-                { from: edge.from, to: edge.to, reason: String(edge.reason ?? '') }
-              )
-              groupEdges++
-              totalEdges++
-            } catch {}
-          }
-          console.log(` ${groupEdges} edges`)
-        } catch (err: any) {
-          console.log(` failed: ${err.message}`)
-        }
-      }
-      console.log(`    📝 ${totalEdges} relationship edges written`)
-    }
-  } catch (err: any) {
-    console.log(`    ⚠️ Round 4a failed: ${err.message}`)
-  }
-
-  // 4c: Keyword normalization
-  try {
-    const allKeywords = allDecisions.flatMap(d => d.props.keywords ?? [])
-    if (allKeywords.length > 0) {
-      const normPrompt = buildKeywordNormalizationPrompt(allKeywords)
-      const rawNorm = await ai.call(normPrompt, { timeoutMs: 60000 })
-      const normalizations = parseJsonSafe<{ canonical: string; aliases: string[] }[]>(rawNorm, [])
-
-      if (Array.isArray(normalizations) && normalizations.length > 0) {
-        let normalized = 0
-        for (const norm of normalizations) {
-          if (!norm.canonical || !Array.isArray(norm.aliases)) continue
-          for (const alias of norm.aliases) {
-            try {
-              const res = await dbSession.run(
-                `MATCH (d:DecisionContext)
-                 WHERE ANY(k IN d.keywords WHERE k = $alias)
-                   AND NOT ANY(k IN d.keywords WHERE k = $canonical)
-                 SET d.keywords = d.keywords + [$canonical]
-                 RETURN count(d) AS cnt`,
-                { alias, canonical: norm.canonical }
-              )
-              const cnt = res.records[0]?.get('cnt')
-              if (cnt && (typeof cnt === 'number' ? cnt > 0 : cnt.toNumber() > 0)) normalized++
-            } catch {}
-          }
-        }
-        console.log(`    🏷️  ${normalized} keyword normalizations applied`)
-      }
-    }
-  } catch (err: any) {
-    console.log(`    ⚠️ Keyword normalization failed: ${err.message}`)
-  }
-}
-
 // ── Build code structure string from graph ──────────────
 
 async function buildCodeStructure(
@@ -537,16 +396,18 @@ async function buildCodeStructure(
 async function main(): Promise<void> {
   const startTime = Date.now()
   const config = loadConfig()
+  const analysisConfig = getAnalysisConfig()
   const ai = createAIProvider(config.ai)
 
-  console.log(`\n📼 Session Ingestion v2`)
+  console.log(`\n📼 Session Ingestion v2 (analysis only)`)
   console.log(`   AI: ${ai.name}`)
-  if (dryRun) console.log(`   ⚠️  DRY RUN — Phase 0 only, no LLM calls`)
+  console.log(`   Analysis: summary ~${analysisConfig.summaryWords} words, content ~${analysisConfig.contentWords} words`)
+  if (dryRun) console.log(`   DRY RUN — Phase 0 only, no LLM calls`)
   if (autoApprove) console.log(`   Auto-approve: analyzing all segments with decisions`)
   console.log()
 
   if (!fs.existsSync(CLAUDE_DIR)) {
-    console.error(`找不到 ${CLAUDE_DIR}，请确认 Claude Code 已安装并使用过`)
+    console.error(`Cannot find ${CLAUDE_DIR}. Make sure Claude Code is installed and has been used.`)
     process.exit(1)
   }
 
@@ -571,12 +432,12 @@ async function main(): Promise<void> {
   }
 
   if (toProcess.length === 0) {
-    console.log('没有新的 session 需要处理')
+    console.log('No new sessions to process')
     if (!dryRun) await closeDriver()
     return
   }
 
-  console.log(`找到 ${toProcess.length} 个 session\n`)
+  console.log(`Found ${toProcess.length} session(s)\n`)
 
   // ── Connect to Memgraph (unless dry-run without graph queries) ──
   if (!dryRun) await verifyConnectivity()
@@ -590,7 +451,7 @@ async function main(): Promise<void> {
     const shortId = phase0.sessionId.slice(0, 8)
 
     if (phase0.turns.length < 3) {
-      console.log(`[${shortId}] ${projectName} — 跳过（对话太短: ${phase0.turns.length} turns）`)
+      console.log(`[${shortId}] ${projectName} — skipped (too short: ${phase0.turns.length} turns)`)
       continue
     }
 
@@ -619,7 +480,6 @@ async function main(): Promise<void> {
 
       if (segments.length === 0) {
         console.log(`    ○ No meaningful segments found`)
-        // still mark as processed
         processed[phase0.sessionId] = {
           processedAt: new Date().toISOString(),
           version: 'v2',
@@ -650,7 +510,7 @@ async function main(): Promise<void> {
         console.log(`    Auto-approved ${withDecisions.length} segments`)
       } else {
         console.log()
-        const answer = await askUser(`    分析哪些？(all / 1,${segments.length > 1 ? '3' : ''} / none): `)
+        const answer = await askUser(`    Analyze which? (all / 1,${segments.length > 1 ? '3' : ''} / none): `)
 
         if (answer === 'none' || answer === 'n') {
           approvedSegments = segments.map(s => ({ ...s, approved: false }))
@@ -721,10 +581,12 @@ async function main(): Promise<void> {
         const { nodes, anchored } = await batchWriteDecisions(dbSession, allDecisions)
         const writeTime = ((Date.now() - writeStart) / 1000).toFixed(1)
         console.log(`    📝 Written: ${nodes} decisions, ${anchored} anchored (${writeTime}s)`)
-      }
 
-      // ─── Round 4: Relationships ─────────────────────
-      await runRound4(allDecisions, dbSession, ai)
+        // Create PENDING edges for later grouping (npm run connect)
+        const newIds = allDecisions.map(d => d.id)
+        await createPendingEdges(dbSession, newIds, { verbose: true })
+        console.log(`    🔗 PENDING edges created — run 'npm run connect' to process relationships`)
+      }
 
       // ─── Save state ─────────────────────────────────
       processed[phase0.sessionId] = {
@@ -752,7 +614,7 @@ async function main(): Promise<void> {
 }
 
 main().catch(err => {
-  console.error('失败:', err.message)
+  console.error('Failed:', err.message)
   closeDriver().catch(() => {})
   process.exit(1)
 })

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CKG — Group Decisions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<style>
+  .main { display:flex; flex-direction:column; height:100vh; }
+  .content-area { flex:1; display:grid; grid-template-columns:380px 1fr; overflow:hidden; min-height:0; }
+
+  /* ── Left: Controls ── */
+  .controls { border-right:1px solid var(--border); padding:20px; display:flex; flex-direction:column; gap:16px; overflow-y:auto; }
+  .section-title { font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; }
+
+  /* Stats cards */
+  .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .stat-card { background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:12px; text-align:center; }
+  .stat-value { font-family:var(--mono); font-size:24px; font-weight:700; }
+  .stat-value.blue { color:var(--accent); }
+  .stat-value.green { color:var(--green); }
+  .stat-value.yellow { color:var(--yellow); }
+  .stat-value.dim { color:var(--text-dim); }
+  .stat-label { font-size:11px; color:var(--text-dim); margin-top:4px; }
+
+  /* Batch config */
+  .batch-config { display:flex; flex-direction:column; gap:10px; }
+  .slider-row { display:flex; align-items:center; gap:12px; }
+  .slider-row input[type="range"] { flex:1; accent-color:var(--accent); height:4px; }
+  .slider-value { font-family:var(--mono); font-size:14px; font-weight:700; color:var(--accent); min-width:32px; text-align:right; }
+
+  /* Batch plan */
+  .batch-plan { background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:14px; }
+  .plan-row { display:flex; justify-content:space-between; align-items:center; font-size:13px; padding:4px 0; }
+  .plan-row .label { color:var(--text-dim); }
+  .plan-row .value { font-family:var(--mono); font-weight:600; }
+  .plan-formula { font-size:11px; color:var(--text-dim); margin-top:8px; padding-top:8px; border-top:1px solid var(--border); line-height:1.5; }
+
+  .divider { border:none; border-top:1px solid var(--border); margin:2px 0; }
+
+  .btn-primary { width:100%; }
+  .btn-stop { width:100%; }
+
+  /* Mode toggle */
+  .mode-toggle { display:flex; gap:0; border:1px solid var(--border); border-radius:6px; overflow:hidden; }
+  .mode-btn { flex:1; padding:8px 12px; font-size:12px; font-weight:600; text-align:center; cursor:pointer; background:var(--surface-2); color:var(--text-dim); border:none; transition:all 0.12s; }
+  .mode-btn.active { background:var(--accent-surface); color:var(--accent); }
+  .mode-btn:hover:not(.active) { color:var(--text); }
+
+  /* ── Right: Output ── */
+  .output-area { display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+
+  /* Batch progress */
+  .batch-progress { padding:12px 20px; border-bottom:1px solid var(--border); background:var(--surface-0); flex-shrink:0; }
+  .progress-bar-wrap { background:var(--surface-2); border-radius:4px; height:8px; overflow:hidden; margin-top:8px; }
+  .progress-bar { height:100%; background:var(--accent); border-radius:4px; transition:width 0.3s; }
+  .progress-text { display:flex; justify-content:space-between; font-size:12px; font-family:var(--mono); color:var(--text-dim); }
+
+  /* Batch list */
+  .batch-list { flex:1; overflow-y:auto; padding:16px 20px; }
+  .batch-item { background:var(--surface-1); border:1px solid var(--border-subtle); border-radius:8px; padding:14px; margin-bottom:10px; transition:border-color 0.15s; }
+  .batch-item:hover { border-color:var(--border); }
+  .batch-item.active { border-color:var(--accent); background:var(--accent-surface); }
+  .batch-item.done { border-left:3px solid var(--green); }
+  .batch-item.error { border-left:3px solid var(--red); }
+  .batch-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  .batch-num { font-family:var(--mono); font-size:12px; font-weight:700; }
+  .batch-status { font-family:var(--mono); font-size:11px; padding:2px 8px; border-radius:3px; }
+  .batch-status.pending { background:var(--surface-3); color:var(--text-dim); }
+  .batch-status.running { background:#1e3a5f; color:var(--accent); }
+  .batch-status.done { background:#14532d; color:var(--green); }
+  .batch-status.error { background:#450a0a; color:var(--red); }
+  .batch-composition { font-size:12px; color:var(--text-dim); }
+  .batch-composition span { font-family:var(--mono); }
+  .batch-results { font-size:12px; color:var(--text-secondary); margin-top:6px; }
+
+  .empty-state { text-align:center; padding:60px 20px; color:var(--text-dim); }
+  .empty-state .icon { font-size:48px; margin-bottom:16px; opacity:0.3; }
+  .empty-state p { font-size:13px; line-height:1.6; max-width:320px; margin:0 auto; }
+
+  .log-footer { border-top:1px solid var(--border); padding:8px 20px; font-family:var(--mono); font-size:12px; color:var(--text-dim); display:flex; gap:20px; flex-shrink:0; }
+</style>
+</head>
+<body>
+
+<nav class="sidebar" id="sidebar"></nav>
+<script src="/sidebar.js"></script>
+
+<div class="main">
+  <div class="page-header">
+    <h2>Group Decisions</h2>
+    <div class="status-badge idle" id="statusBadge">IDLE</div>
+  </div>
+
+  <div class="content-area">
+    <!-- ── Left: Controls ── -->
+    <div class="controls">
+
+      <!-- PENDING edge stats -->
+      <div>
+        <div class="section-title">Pending Comparisons</div>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-value blue" id="pendingCount">—</div>
+            <div class="stat-label">PENDING edges</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value dim" id="decisionCount">—</div>
+            <div class="stat-label">Total decisions</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value green" id="connectedEdges">—</div>
+            <div class="stat-label">Connected edges</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value yellow" id="newDecisions">—</div>
+            <div class="stat-label">New (uncompared)</div>
+          </div>
+        </div>
+        <button class="btn-ghost" style="width:100%;margin-top:8px" id="refreshBtn">↻ Refresh Stats</button>
+      </div>
+
+      <hr class="divider">
+
+      <!-- Content mode -->
+      <div>
+        <div class="section-title">Comparison Mode</div>
+        <div class="mode-toggle">
+          <button class="mode-btn active" data-mode="summary" id="modeSummary">Summary</button>
+          <button class="mode-btn" data-mode="content" id="modeContent">Full Content</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:6px;line-height:1.4">
+          <strong>Summary</strong>: ~<span id="summaryWordsLabel">30</span> words/decision → larger batches, faster<br>
+          <strong>Full Content</strong>: ~<span id="contentWordsLabel">150</span> words/decision → smaller batches, more accurate
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <!-- Batch size -->
+      <div class="batch-config">
+        <div class="section-title">Batch Size</div>
+        <div class="slider-row">
+          <input type="range" id="batchSlider" min="10" max="100" step="5" value="50">
+          <span class="slider-value" id="batchValue">50</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-dim);">
+          Decisions per batch. Larger = fewer LLM calls but more tokens per call.
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <!-- Batch plan -->
+      <div>
+        <div class="section-title">Batch Plan</div>
+        <div class="batch-plan" id="batchPlan">
+          <div class="plan-row">
+            <span class="label">Optimal k (new per batch)</span>
+            <span class="value" id="planK">—</span>
+          </div>
+          <div class="plan-row">
+            <span class="label">Old per batch</span>
+            <span class="value" id="planOld">—</span>
+          </div>
+          <div class="plan-row">
+            <span class="label">Total batches</span>
+            <span class="value" id="planBatches">—</span>
+          </div>
+          <div class="plan-row">
+            <span class="label">Est. LLM calls</span>
+            <span class="value" id="planCalls">—</span>
+          </div>
+          <div class="plan-formula" id="planFormula">
+            Configure batch size and refresh stats to see the plan.
+          </div>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <!-- Actions -->
+      <button class="btn-primary" id="startBtn">
+        <span>▶</span> Start Grouping
+      </button>
+      <button class="btn-stop" id="stopBtn" style="display:none">
+        <span>■</span> Stop After Current Batch
+      </button>
+    </div>
+
+    <!-- ── Right: Output ── -->
+    <div class="output-area">
+      <div class="batch-progress" id="progressSection" style="display:none">
+        <div class="progress-text">
+          <span id="progressLabel">Batch 0 / 0</span>
+          <span id="progressPct">0%</span>
+        </div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar" id="progressBar" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div class="batch-list" id="batchList">
+        <div class="empty-state">
+          <div class="icon">🔗</div>
+          <p>No batches yet. Configure batch size and click "Start Grouping" to begin connecting related decisions.</p>
+          <p style="margin-top:12px">Each batch sends a group of decisions to the LLM to discover relationships (CAUSED_BY, DEPENDS_ON, CONFLICTS_WITH, CO_DECIDED).</p>
+        </div>
+      </div>
+
+      <div class="log-footer">
+        <span id="batchesDone">0 batches</span>
+        <span id="edgesFound">0 edges</span>
+        <span id="elapsed">—</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── State ──
+  let mode = 'summary'
+  let batchSize = 50
+  let stats = { pending: 0, total: 0, connected: 0, newDecisions: 0 }
+
+  const batchSlider = document.getElementById('batchSlider')
+  const batchValue = document.getElementById('batchValue')
+
+  // ── Batch slider ──
+  batchSlider.addEventListener('input', () => {
+    batchSize = parseInt(batchSlider.value)
+    batchValue.textContent = batchSize
+    updatePlan()
+  })
+
+  // ── Mode toggle ──
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'))
+      btn.classList.add('active')
+      mode = btn.dataset.mode
+      updatePlan()
+    })
+  })
+
+  // ── Refresh stats (placeholder — no backend yet) ──
+  document.getElementById('refreshBtn').addEventListener('click', loadStats)
+
+  async function loadStats() {
+    // TODO: fetch from /api/group/stats
+    // For now, show placeholder
+    document.getElementById('pendingCount').textContent = '—'
+    document.getElementById('decisionCount').textContent = '—'
+    document.getElementById('connectedEdges').textContent = '—'
+    document.getElementById('newDecisions').textContent = '—'
+    updatePlan()
+  }
+
+  // ── Batch plan calculation ──
+  function updatePlan() {
+    const M = stats.total - stats.newDecisions  // old decisions
+    const K = stats.newDecisions                 // new decisions
+    const B = batchSize
+
+    if (K === 0 || B < 2) {
+      document.getElementById('planK').textContent = '—'
+      document.getElementById('planOld').textContent = '—'
+      document.getElementById('planBatches').textContent = '—'
+      document.getElementById('planCalls').textContent = '—'
+      document.getElementById('planFormula').textContent = 'Refresh stats to see pending decisions.'
+      return
+    }
+
+    // Find optimal k
+    let bestK = 1, bestT = Infinity
+    for (let k = 1; k <= Math.min(K, B - 1); k++) {
+      const rounds = Math.ceil(M / (B - k))
+      const groups = Math.ceil(K / k)
+      const T = rounds * groups
+      if (T < bestT) { bestT = T; bestK = k }
+    }
+
+    const oldPerBatch = B - bestK
+    document.getElementById('planK').textContent = bestK
+    document.getElementById('planOld').textContent = oldPerBatch
+    document.getElementById('planBatches').textContent = bestT
+    document.getElementById('planCalls').textContent = bestT  // 1 LLM call per batch
+    document.getElementById('planFormula').textContent =
+      `T(k=${bestK}) = ⌈${M}/${oldPerBatch}⌉ × ⌈${K}/${bestK}⌉ = ${bestT} batches\n` +
+      `Each batch: ${bestK} new + ${oldPerBatch} old = ${B} decisions`
+  }
+
+  // ── Start / Stop (placeholder) ──
+  document.getElementById('startBtn').addEventListener('click', () => {
+    // TODO: POST /api/group/start
+    console.log('Start grouping:', { mode, batchSize })
+  })
+
+  document.getElementById('stopBtn').addEventListener('click', () => {
+    // TODO: POST /api/group/stop
+    console.log('Stop grouping')
+  })
+
+  // ── Load config for word counts ──
+  fetch('/api/cold-start/config').then(r => r.json()).then(data => {
+    if (data.analysis) {
+      document.getElementById('summaryWordsLabel').textContent = data.analysis.summaryWords || 30
+      document.getElementById('contentWordsLabel').textContent = data.analysis.contentWords || 150
+    }
+  }).catch(() => {})
+
+  // ── Init ──
+  loadStats()
+</script>
+</body>
+</html>

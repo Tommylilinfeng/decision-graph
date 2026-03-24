@@ -7,6 +7,7 @@
  */
 
 import { BusinessContext } from './cold-start'
+import { AnalysisConfig } from '../config'
 
 // ── Types ───────────────────────────────────────────────
 
@@ -47,12 +48,14 @@ export function buildSegmentationPrompt(
     : ''
 
   const chunkNote = chunkInfo && chunkInfo.totalChunks > 1
-    ? `\n**注意：这是一段较长对话的第 ${chunkInfo.chunkNumber}/${chunkInfo.totalChunks} 部分。**${
-      chunkInfo.prevSummary ? `\n前一部分最后在做: "${chunkInfo.prevSummary}"` : ''
+    ? `\n**Note: This is chunk ${chunkInfo.chunkNumber}/${chunkInfo.totalChunks} of a longer conversation.**${
+      chunkInfo.prevSummary ? `\nThe previous chunk ended with: "${chunkInfo.prevSummary}"` : ''
     }\n`
     : ''
 
   return `You are segmenting a Claude Code conversation into logical work units.
+
+**You MUST respond entirely in English.**
 
 ## Project: ${projectName}
 Session: ${sessionStart} → ${sessionEnd}
@@ -77,10 +80,10 @@ Return ONLY raw JSON (no markdown, no backticks):
 [{
   "startTurn": 0,
   "endTurn": 15,
-  "summary": "一句话说清这段在做什么，包含关键决策点",
+  "summary": "One sentence describing what this segment does, including key decision points",
   "touchedFiles": ["src/store/timeSlotStore.js"],
   "hasDecisions": true,
-  "decisionHints": ["为什么选择 X 而不是 Y", "某个 trade-off"]
+  "decisionHints": ["Why X was chosen over Y", "Some trade-off"]
 }]
 
 Return empty array [] if this conversation has no meaningful segments (e.g. just testing MCP tools).`
@@ -95,8 +98,11 @@ export function buildExtractionPrompt(
   conversationText: string,
   codeStructure: string,
   callerCalleeSection: string,
-  businessContext: BusinessContext[]
+  businessContext: BusinessContext[],
+  analysisConfig: AnalysisConfig
 ): string {
+  const { summaryWords, contentWords } = analysisConfig
+
   const bizSection = businessContext.length > 0
     ? `\n## Business Context\n${businessContext.map(b => `  - ${b.summary}: ${b.content}`).join('\n')}\n`
     : ''
@@ -106,6 +112,8 @@ export function buildExtractionPrompt(
     : ''
 
   return `You are extracting design decisions from a Claude Code conversation segment.
+
+**You MUST respond entirely in English. All summaries, content, and keywords must be in English.**
 
 ## Project: ${projectName}
 ${bizSection}
@@ -132,9 +140,9 @@ Only use function/file names that appear in the code structure section — do no
   "function": "fetchTimeSlotContext",
   "file": "src/store/timeSlotStore.ts",
   "related_functions": ["getAvailableVendorIds"],
-  "summary": "把 timeslot context 查询从前端多次 RPC 合并为一次 get_current_run_context RPC，减少数据库往返",
-  "content": "原来前端先调 get_available_vendors 再调 get_current_time_slot 两次 RPC。合并为 get_current_run_context 一次拿到所有信息，减少延迟。代价是 PostgreSQL 函数更复杂，但前端逻辑简化了。",
-  "keywords": ["RPC", "timeslot", "run_context", "延迟优化"],
+  "summary": "Merged timeslot context queries from two separate RPCs into one get_current_run_context RPC to reduce database round trips",
+  "content": "Originally the frontend called get_available_vendors then get_current_time_slot as two separate RPCs. Merged into get_current_run_context to fetch all info in one call, reducing latency. Trade-off is a more complex PostgreSQL function, but simpler frontend logic.",
+  "keywords": ["RPC", "timeslot", "run_context", "latency optimization"],
   "finding_type": "decision",
   "transcript_range": [3, 8]
 }
@@ -150,11 +158,14 @@ Return ONLY raw JSON array (no markdown, no backticks). Empty array [] if no dec
   "function": "functionName or null",
   "file": "path/to/file.ts or null",
   "related_functions": ["other1", "other2"],
-  "summary": "20-50 words — the decision with enough context to understand without code",
-  "content": "200-600 chars — WHY, trade-offs, alternatives considered",
+  "summary": "around ${summaryWords} words — the decision with enough context to understand without code",
+  "content": "around ${contentWords} words — WHY, trade-offs, alternatives considered",
   "keywords": ["kw1", "kw2", "kw3"],
   "finding_type": "decision|suboptimal|bug",
   "critique": "only for suboptimal/bug",
   "transcript_range": [startTurnIndex, endTurnIndex]
-}]`
+}]
+
+IMPORTANT:
+- All output MUST be in English.`
 }

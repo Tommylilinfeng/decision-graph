@@ -3,12 +3,12 @@
  *
  * Multi-pipeline customizable prompt template system.
  *
- * 每条 pipeline 是 data/pipelines/<pipelineId>/ 下的三个文件：
- *   pipeline.json   — round 定义（id, name, variables 等）
- *   templates.json   — 默认模板（{{placeholder}} 文本）
- *   overrides.json   — 用户在 Dashboard 里编辑的模板覆盖
+ * Each pipeline is stored as three files in data/pipelines/<pipelineId>/:
+ *   pipeline.json   — round definitions (id, name, variables, etc.)
+ *   templates.json  — default templates ({{placeholder}} text)
+ *   overrides.json  — user-edited template overrides from Dashboard
  *
- * cold-start-v2.ts 调用 createCustomPromptBuilders('cold-start') 获取可插拔的 prompt builder。
+ * cold-start-v2.ts calls createCustomPromptBuilders('cold-start') for pluggable prompt builders.
  */
 
 import fs from 'fs'
@@ -18,6 +18,7 @@ import {
   FileEntry, FunctionTriageEntry, CallerCalleeCode, BusinessContext,
   DecisionSummaryForGrouping, DecisionFullContent,
 } from './cold-start'
+import { AnalysisConfig, getAnalysisConfig } from '../config'
 
 // ── Types ───────────────────────────────────────────────
 
@@ -126,8 +127,6 @@ export function getTemplate(pipelineId: string, roundId: string): { template: st
 }
 
 // ── Variable Preparation (cold-start specific) ──────────
-// 这些函数跟 cold-start pipeline 的 round 绑定。
-// 未来 full-analysis 会有自己的 variable prep 函数。
 
 function prepareScopeVars(goal: string, files: FileEntry[]): Record<string, string> {
   const fileList = files.map((f, i) => {
@@ -167,7 +166,8 @@ function prepareTriageVars(
 function prepareDeepAnalysisVars(
   fnName: string, fnCode: string, filePath: string,
   callers: CallerCalleeCode[], callees: CallerCalleeCode[],
-  businessContext: BusinessContext[], goal: string
+  businessContext: BusinessContext[], goal: string,
+  analysisConfig: AnalysisConfig
 ): Record<string, string> {
   const callerSection = callers.length > 0
     ? `\n## Functions that CALL ${fnName} (upstream — why they need this function):\n${callers.map(c =>
@@ -188,6 +188,8 @@ function prepareDeepAnalysisVars(
   return {
     goal, businessContext: bizSection, functionName: fnName,
     filePath, functionCode: fnCode, callerSection, calleeSection,
+    summaryWords: String(analysisConfig.summaryWords),
+    contentWords: String(analysisConfig.contentWords),
   }
 }
 
@@ -235,12 +237,13 @@ function renderTemplate(template: string, vars: Record<string, string>): string 
 
 /**
  * Create PromptBuilders using the template system.
- * pipelineId 指定从哪条 pipeline 加载模板。
+ * pipelineId specifies which pipeline to load templates from.
  */
 export function createCustomPromptBuilders(pipelineId: string = 'cold-start'): PromptBuilders {
   const overrides = loadPromptOverrides(pipelineId)
   const defaults = loadTemplates(pipelineId)
   const t = (roundId: string) => overrides[roundId] ?? defaults[roundId] ?? ''
+  const analysisConfig = getAnalysisConfig()
 
   return {
     scope: (goal, files) =>
@@ -249,8 +252,8 @@ export function createCustomPromptBuilders(pipelineId: string = 'cold-start'): P
     triage: (filePath, code, functions, businessContext, goal) =>
       renderTemplate(t('triage'), prepareTriageVars(filePath, code, functions, businessContext, goal)),
 
-    deepAnalysis: (fnName, fnCode, filePath, callers, callees, businessContext, goal) =>
-      renderTemplate(t('deepAnalysis'), prepareDeepAnalysisVars(fnName, fnCode, filePath, callers, callees, businessContext, goal)),
+    deepAnalysis: (fnName, fnCode, filePath, callers, callees, businessContext, goal, _analysisConfig) =>
+      renderTemplate(t('deepAnalysis'), prepareDeepAnalysisVars(fnName, fnCode, filePath, callers, callees, businessContext, goal, _analysisConfig ?? analysisConfig)),
 
     grouping: (decisions, cpgHints) =>
       renderTemplate(t('grouping'), prepareGroupingVars(decisions, cpgHints)),
