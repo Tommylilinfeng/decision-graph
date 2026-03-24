@@ -63,13 +63,13 @@ else
   MISSING=1
 fi
 
-# Joern (optional — needed for code structure analysis)
+# Joern (required — needed for code structure analysis)
 if command -v joern &> /dev/null; then
   echo -e "  ${GREEN}✓${NC} Joern ($(which joern))"
 else
-  echo -e "  ${YELLOW}! Joern not found (optional — needed for code structure analysis)${NC}"
+  echo -e "  ${RED}✗ Joern not found${NC}"
   echo ""
-  echo "    To install Joern:"
+  echo "    Joern is required for code structure analysis (CPG generation)."
   echo ""
   echo "    macOS (Homebrew):"
   echo "      brew install joern"
@@ -77,9 +77,7 @@ else
   echo "    Linux / manual:"
   echo "      curl -L https://github.com/joernio/joern/releases/latest/download/joern-install.sh | bash"
   echo ""
-  echo "    You can skip Joern for now — CKG will still extract decisions from code,"
-  echo "    but without function-level call graph analysis."
-  echo ""
+  MISSING=1
 fi
 
 # Claude CLI (optional — needed for decision extraction)

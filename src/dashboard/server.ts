@@ -3850,7 +3850,24 @@ app.get('*', (c) => {
 
 // ── 启动 ────────────────────────────────────────────────
 
-const PORT = parseInt(process.env.DASHBOARD_PORT ?? '3001')
+const PREFERRED_PORT = parseInt(process.env.DASHBOARD_PORT ?? '3001')
+const MAX_PORT_ATTEMPTS = 10
+
+function isPortAvailable(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = require('net').createServer()
+    server.once('error', () => resolve(false))
+    server.once('listening', () => { server.close(); resolve(true) })
+    server.listen(port)
+  })
+}
+
+async function findAvailablePort(start: number): Promise<number> {
+  for (let port = start; port < start + MAX_PORT_ATTEMPTS; port++) {
+    if (await isPortAvailable(port)) return port
+  }
+  throw new Error(`No available port found in range ${start}–${start + MAX_PORT_ATTEMPTS - 1}`)
+}
 
 async function main() {
   await verifyConnectivity()
@@ -3860,12 +3877,17 @@ async function main() {
     console.log(`📅 Schedule loaded: deadline ${schedule.config.deadline ?? 'not set'}`)
   }
 
-  serve({ fetch: app.fetch, port: PORT }, () => {
-    console.log(`\n🖥️  CKG Dashboard: http://localhost:${PORT}\n`)
+  const port = await findAvailablePort(PREFERRED_PORT)
+  if (port !== PREFERRED_PORT) {
+    console.log(`⚠️  Port ${PREFERRED_PORT} is in use, using ${port} instead`)
+  }
+
+  serve({ fetch: app.fetch, port }, () => {
+    console.log(`\n🖥️  CKG Dashboard: http://localhost:${port}\n`)
   })
 }
 
 main().catch(err => {
-  console.error('Dashboard 启动失败:', err.message)
+  console.error('Dashboard failed to start:', err.message)
   process.exit(1)
 })
