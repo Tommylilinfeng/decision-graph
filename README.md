@@ -34,13 +34,18 @@ Codebase → Joern CPG → LLM extracts decisions per function
 ## Quick Start
 
 ```bash
-# Prerequisites: Node.js 18+, Docker, Joern, Claude CLI
+# Prerequisites: Node.js 18+, Docker, Claude CLI
+# (Java and Joern are auto-installed by setup if missing)
 git clone https://github.com/Tommylilinfeng/context-chain.git
-cd context-chain && npm install
+cd context-chain && npm run setup
+```
 
-# Start Memgraph
+```bash
+# Start Memgraph (wait for it to be ready before proceeding)
 docker compose up -d
+```
 
+```bash
 # Start the Dashboard
 npm run dashboard
 # → http://localhost:3001

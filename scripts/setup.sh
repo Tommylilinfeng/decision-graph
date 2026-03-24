@@ -29,10 +29,17 @@ echo ""
 # Step 1: Check prerequisites
 # ─────────────────────────────────────────────────────────
 
-echo -e "${BLUE}[1/6] Checking prerequisites...${NC}"
+echo -e "${BLUE}[1/6] Checking & installing prerequisites...${NC}"
 echo ""
 
 MISSING=0
+
+# Detect platform & package manager
+OS="$(uname -s)"
+HAS_BREW=0
+if command -v brew &> /dev/null; then
+  HAS_BREW=1
+fi
 
 # Node.js
 if command -v node &> /dev/null; then
@@ -48,7 +55,7 @@ fi
 if command -v docker &> /dev/null; then
   DOCKER_VERSION=$(docker --version | head -1)
   echo -e "  ${GREEN}✓${NC} ${DOCKER_VERSION}"
-  
+
   # Check if Docker daemon is running
   if docker info &> /dev/null; then
     echo -e "  ${GREEN}✓${NC} Docker daemon is running"
@@ -63,35 +70,81 @@ else
   MISSING=1
 fi
 
+# Java (required — Joern runs on JVM)
+if command -v java &> /dev/null; then
+  JAVA_VERSION=$(java -version 2>&1 | head -1)
+  echo -e "  ${GREEN}✓${NC} Java ${JAVA_VERSION}"
+else
+  echo -e "  ${YELLOW}! Java not found — installing (required by Joern)...${NC}"
+  if [ "$OS" = "Darwin" ] && [ "$HAS_BREW" -eq 1 ]; then
+    brew install openjdk@21
+    # Homebrew doesn't symlink openjdk by default
+    if [ -d "$(brew --prefix)/opt/openjdk@21/bin" ]; then
+      export PATH="$(brew --prefix)/opt/openjdk@21/bin:$PATH"
+    fi
+  elif [ "$OS" = "Linux" ]; then
+    if command -v apt-get &> /dev/null; then
+      sudo apt-get update -qq && sudo apt-get install -y openjdk-21-jdk
+    elif command -v dnf &> /dev/null; then
+      sudo dnf install -y java-21-openjdk
+    else
+      echo -e "  ${RED}✗ Cannot auto-install Java — unknown Linux package manager${NC}"
+      echo "    Please install Java 11+ manually and re-run this script."
+      MISSING=1
+    fi
+  else
+    echo -e "  ${RED}✗ Cannot auto-install Java on this platform${NC}"
+    echo "    Please install Java 11+ manually and re-run this script."
+    MISSING=1
+  fi
+
+  # Verify installation
+  if command -v java &> /dev/null; then
+    JAVA_VERSION=$(java -version 2>&1 | head -1)
+    echo -e "  ${GREEN}✓${NC} Java installed: ${JAVA_VERSION}"
+  elif [ "$MISSING" -eq 0 ]; then
+    echo -e "  ${RED}✗ Java installation failed${NC}"
+    MISSING=1
+  fi
+fi
+
 # Joern (required — needed for code structure analysis)
 if command -v joern &> /dev/null; then
   echo -e "  ${GREEN}✓${NC} Joern ($(which joern))"
 else
-  echo -e "  ${RED}✗ Joern not found${NC}"
-  echo ""
-  echo "    Joern is required for code structure analysis (CPG generation)."
-  echo ""
-  echo "    macOS (Homebrew):"
-  echo "      brew install joern"
-  echo ""
-  echo "    Linux / manual:"
-  echo "      curl -L https://github.com/joernio/joern/releases/latest/download/joern-install.sh | bash"
-  echo ""
-  MISSING=1
+  echo -e "  ${YELLOW}! Joern not found — installing...${NC}"
+  if [ "$OS" = "Darwin" ] && [ "$HAS_BREW" -eq 1 ]; then
+    brew install joern
+  else
+    # Linux / manual install via official script
+    curl -fsSL https://github.com/joernio/joern/releases/latest/download/joern-install.sh -o /tmp/joern-install.sh
+    chmod +x /tmp/joern-install.sh
+    bash /tmp/joern-install.sh
+    rm -f /tmp/joern-install.sh
+  fi
+
+  # Verify installation
+  if command -v joern &> /dev/null; then
+    echo -e "  ${GREEN}✓${NC} Joern installed: $(which joern)"
+  else
+    echo -e "  ${RED}✗ Joern installation failed${NC}"
+    echo "    Try manually: https://docs.joern.io/installation"
+    MISSING=1
+  fi
 fi
 
 # Claude CLI (optional — needed for decision extraction)
 if command -v claude &> /dev/null; then
   echo -e "  ${GREEN}✓${NC} Claude CLI ($(which claude))"
 else
-  echo -e "  ${YELLOW}! Claude CLI not found (needed for cold-start decision extraction)${NC}"
+  echo -e "  ${YELLOW}! Claude CLI not found (needed for decision extraction)${NC}"
   echo "    Install: npm install -g @anthropic-ai/claude-code"
   echo "    Then: claude login"
 fi
 
 if [ "$MISSING" -eq 1 ]; then
   echo ""
-  echo -e "${RED}Missing required prerequisites. Please install them and re-run this script.${NC}"
+  echo -e "${RED}Some prerequisites could not be installed. Please fix the errors above and re-run.${NC}"
   exit 1
 fi
 
