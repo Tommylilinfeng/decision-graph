@@ -1,12 +1,12 @@
 /**
- * cold-start.ts
+ * cold-start.ts (legacy — see cold-start-v2.ts)
  *
- * 冷启动：LLM 读现有代码文件，推断设计决策，写入 DecisionContext 节点。
+ * Cold start: LLM reads code files, infers design decisions, writes DecisionContext nodes.
  *
- * 运行：
+ * Usage:
  *   npm run cold-start -- \
- *     --repo bite-me-website \
- *     --src /Users/zhouyitong/dev/bite/biteme-shared/src \
+ *     --repo my-service \
+ *     --src /path/to/repo/src \
  *     --owner me
  *
  * 策略：
@@ -246,6 +246,20 @@ ${code}
     if (!response.ok) {
       console.error(`  API 错误: ${response.status}`)
       return []
+    }
+
+    // Emit unified rate limit for parent process
+    const sessionUtil = response.headers.get('anthropic-ratelimit-unified-5h-utilization')
+    const weeklyUtil = response.headers.get('anthropic-ratelimit-unified-7d-utilization')
+    if (sessionUtil || weeklyUtil) {
+      console.log(`__RATELIMIT__${JSON.stringify({
+        session_utilization: parseFloat(sessionUtil ?? '0'),
+        session_reset: new Date(response.headers.get('anthropic-ratelimit-unified-5h-reset') ?? '').getTime() || 0,
+        weekly_utilization: parseFloat(weeklyUtil ?? '0'),
+        weekly_reset: new Date(response.headers.get('anthropic-ratelimit-unified-7d-reset') ?? '').getTime() || 0,
+        status: response.headers.get('anthropic-ratelimit-unified-status') ?? 'unknown',
+        updatedAt: Date.now(),
+      })}`)
     }
 
     const data = await response.json() as any

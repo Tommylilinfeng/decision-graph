@@ -1,0 +1,24 @@
+{
+  "name": "Advanced",
+  "description": "Multi-round agentic analysis. LLM can request additional context (2-hop neighbors, existing decisions, file overviews) across multiple rounds, returning partial decisions as it goes.",
+  "extends": "_default",
+
+  "advanced_mode": true,
+  "advanced_max_rounds": 3,
+  "advanced_modules": {
+    "callerCode": true,
+    "calleeCode": true,
+    "twoHopNames": true,
+    "existingDecisions": true,
+    "businessContext": true,
+    "fileContext": false,
+    "tableAccess": false
+  },
+
+  "caller_depth": 1,
+  "callee_depth": 1,
+  "max_callers_per_level": 10,
+  "max_callees_per_level": 10,
+  "max_decisions": 5,
+  "timeout_ms": 180000
+}

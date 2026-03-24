@@ -171,10 +171,12 @@ function drillFile(idx){
       var st = fnState(fn)
       var clickable = fn.decisions>0
       var attrs = clickable ? ' onclick="window.location.href=\'/decisions?q='+encodeURIComponent(fn.name)+'\'" style="cursor:pointer"' : ''
+      var analyzeBtn = '<button class="fn-analyze-btn" data-fn="'+esc(fn.name)+'" data-file="'+esc(f.path||f.name)+'" onclick="event.stopPropagation();analyzeSingleFn(this)" style="font-size:11px;padding:2px 8px;border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:4px;cursor:pointer;margin-left:auto;white-space:nowrap">Analyze</button>'
       return '<div class="fn-row"'+attrs+'>'
         +'<div class="fn-dot" style="background:'+st.dot+'"></div>'
         +'<span class="fn-name">'+esc(fn.name)+'</span>'
         +'<span class="fn-status">'+st.label+(fn.analyzedAt?' &#183; analyzed':'')+'</span>'
+        +analyzeBtn
         +'<span class="fn-badge" style="background:'+st.bg+';color:'+st.text+'">'+fn.decisions+'</span>'
         +'</div>'
     }).join('')
@@ -212,6 +214,40 @@ function drillFile(idx){
   if(idx<allData.files.length-1) nav+='<a onclick="drillFile('+(idx+1)+')" style="color:var(--accent);cursor:pointer;font-size:13px">'+esc((allData.files[idx+1].path||allData.files[idx+1].name).split('/').pop())+' &#8594;</a>'; else nav+='<span></span>'
   nav+='</div>'
   el.innerHTML += nav
+}
+
+async function analyzeSingleFn(btn){
+  var fnName = btn.getAttribute('data-fn')
+  var filePath = btn.getAttribute('data-file')
+  var repo = document.getElementById('repoSelect').value
+  if(!repo||!fnName||!filePath) return
+
+  btn.disabled = true
+  btn.textContent = 'Analyzing...'
+  btn.style.opacity = '0.6'
+
+  try {
+    var res = await fetch('/api/coverage/analyze-function', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({repo:repo, functionName:fnName, filePath:filePath})
+    })
+    var data = await res.json()
+    if(!res.ok) throw new Error(data.error||'Analysis failed')
+
+    btn.textContent = data.decisions+' dec'
+    btn.style.borderColor = 'var(--green)'
+    btn.style.color = 'var(--green)'
+
+    // Reload data to refresh counts
+    setTimeout(function(){ loadRepo() }, 500)
+  } catch(e){
+    btn.textContent = 'Error'
+    btn.style.borderColor = 'var(--red)'
+    btn.style.color = 'var(--red)'
+    btn.title = e.message
+    setTimeout(function(){ btn.textContent='Retry'; btn.disabled=false; btn.style.opacity='1'; btn.style.borderColor='var(--accent)'; btn.style.color='var(--accent)' }, 3000)
+  }
 }
 
 init()

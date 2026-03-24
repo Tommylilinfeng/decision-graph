@@ -1,7 +1,13 @@
 {
   "project": "my-project",
   "ai": {
-    "provider": "claude-cli"
+    "provider": "claude-cli",
+    "model": "claude-sonnet-4-20250514",
+    "maxTokens": 4096,
+    "embedding": {
+      "provider": "voyage",
+      "model": "voyage-3-lite"
+    }
   },
   "repos": [
     {
@@ -9,7 +15,13 @@
       "path": "/absolute/path/to/repo",
       "type": "backend",
       "cpgFile": "data/my-service.json",
+      "language": "javascript",
+      "srcDir": "src",
       "packages": []
     }
-  ]
+  ],
+  "analysis": {
+    "summaryWords": 30,
+    "contentWords": 150
+  }
 }

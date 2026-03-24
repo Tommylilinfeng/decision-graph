@@ -23,5 +23,17 @@
   "language": "auto",
 
   "include_business_context": true,
-  "timeout_ms": 120000
+  "timeout_ms": 120000,
+
+  "advanced_mode": false,
+  "advanced_max_rounds": 3,
+  "advanced_modules": {
+    "callerCode": true,
+    "calleeCode": true,
+    "twoHopNames": true,
+    "existingDecisions": true,
+    "businessContext": true,
+    "fileContext": false,
+    "tableAccess": false
+  }
 }

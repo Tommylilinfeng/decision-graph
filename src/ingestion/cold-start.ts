@@ -1,18 +1,13 @@
-// @deprecated — use cold-start-v2.ts instead
+// @deprecated — use cold-start-v2.ts instead. This file is kept for reference only.
 /**
  * cold-start.ts
  *
- * Pipeline：读代码文件 → (可选) 查图谱调用关系 → 调 claude CLI → 提取决策 → 写入 Memgraph
+ * Pipeline: read code files → (optional) query graph for call relations → call Claude CLI → extract decisions → write to Memgraph
  *
- * Performance 优化（vs 原版）：
- * - claude 调用从 execSync 串行 → execAsync 并发（--concurrency 控制）
- * - 决策写入从逐条 MERGE → 批量 UNWIND
- * - Memgraph session 复用（一个 session 处理所有写入）
- *
- * 用法：
+ * Usage:
  *   npm run cold-start -- \
- *     --repo bite-me-website \
- *     --src /Users/zhouyitong/dev/bite/biteme-shared/src \
+ *     --repo my-service \
+ *     --src /path/to/repo/src \
  *     --owner me \
  *     --concurrency 3
  */

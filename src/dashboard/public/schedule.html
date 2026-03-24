@@ -11,14 +11,14 @@
   .main { display:flex; flex-direction:column; height:100vh; }
 
   .content-area {
-    flex: 1; display: grid; grid-template-columns: 380px 1fr;
+    flex: 1; display: grid; grid-template-columns: 320px 1fr;
     overflow: hidden; min-height: 0;
   }
 
-  /* ── Controls ─── */
+  /* ── Left panel ─── */
   .controls {
     border-right: 1px solid var(--border); padding: 20px;
-    display: flex; flex-direction: column; gap: 14px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 16px; overflow-y: auto;
   }
   .section-title {
     font-size: 11px; font-weight: 700; color: var(--text-dim);
@@ -26,92 +26,69 @@
   }
   input[type="time"] {
     width: 100%; background: var(--surface-2); border: 1px solid var(--border);
-    border-radius: 6px; color: var(--text); font-family: var(--sans); font-size: 13px;
-    padding: 8px 12px; transition: border-color 0.15s;
+    border-radius: 6px; color: var(--text); font-family: var(--sans); font-size: 14px;
+    padding: 10px 12px; transition: border-color 0.15s;
   }
+  input[type="time"]:focus { outline:none; border-color:var(--accent); }
+  .divider { border:none; border-top:1px solid var(--border); margin:2px 0; }
+  .hint { font-size:11px; color:var(--text-dim); line-height:1.4; margin-top:4px; }
 
-  .phase-grid { display:flex; flex-direction:column; gap:6px; }
-  .phase-toggle {
-    display:flex; align-items:center; gap:10px; padding:8px 12px;
-    background:var(--surface-2); border:1px solid var(--border); border-radius:6px;
-    cursor:pointer; transition:all 0.12s;
+  .btn-run {
+    width:100%; padding:12px 18px; background:#14532d; color:var(--green);
+    border:1px solid #166534; border-radius:6px; font-size:14px; font-weight:700; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    transition: all 0.15s;
   }
-  .phase-toggle:hover { border-color:var(--text-dim); }
-  .phase-toggle input[type="checkbox"] { width:16px; height:16px; accent-color:var(--accent); cursor:pointer; flex-shrink:0; }
-  .phase-toggle .phase-name { font-size:13px; font-weight:600; flex:1; }
-  .phase-toggle .phase-desc { font-size:11px; color:var(--text-dim); }
-  .phase-toggle .phase-num {
-    font-family:var(--mono); font-size:10px; color:var(--text-dim);
-    background:var(--surface-3); padding:2px 6px; border-radius:3px; flex-shrink:0;
-  }
-
-  .goal-list { display:flex; flex-direction:column; gap:6px; }
-  .goal-item {
-    display:flex; align-items:center; gap:8px; padding:6px 10px;
-    background:var(--surface-2); border:1px solid var(--border); border-radius:6px;
-  }
-  .goal-item .goal-text { flex:1; font-size:13px; font-family:var(--mono); }
-  .goal-item .goal-remove {
-    background:none; border:none; color:var(--text-dim); font-size:16px;
-    cursor:pointer; padding:0 4px; line-height:1;
-  }
-  .goal-item .goal-remove:hover { color:var(--red); }
-  .goal-add-row { display:flex; gap:8px; }
-  .goal-add-row input { flex:1; }
-  .goal-add-row button {
-    padding:8px 14px; background:var(--surface-3); border:1px solid var(--border);
-    border-radius:6px; color:var(--text); font-size:13px; font-weight:600; cursor:pointer;
-    white-space:nowrap;
-  }
-  .goal-add-row button:hover { border-color:var(--accent); color:var(--accent); }
-  .suggestions { display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; }
-  .suggestion {
-    font-size:11px; padding:3px 8px; border-radius:4px;
-    background:var(--surface-3); border:1px solid transparent;
-    color:var(--text-dim); cursor:pointer; transition:all 0.12s;
-  }
-  .suggestion:hover { border-color:var(--accent); color:var(--text); }
-
-  .btn-primary { width:100%; }
-  .btn-danger {
-    width:100%; padding:10px 18px; background:var(--surface-2); color:var(--red);
+  .btn-run:hover { background:#166534; }
+  .btn-run:disabled { opacity:0.5; cursor:not-allowed; }
+  .btn-stop {
+    width:100%; padding:12px 18px; background:var(--surface-2); color:var(--red);
     border:1px solid #450a0a; border-radius:6px; font-size:14px; font-weight:700; cursor:pointer;
     display:flex; align-items:center; justify-content:center; gap:8px;
   }
-  .btn-danger:hover { background:#1c1012; }
-  .divider { border:none; border-top:1px solid var(--border); margin:2px 0; }
-  .hint { font-size:11px; color:var(--text-dim); line-height:1.4; margin-top:2px; }
+  .btn-stop:hover { background:#1c1012; }
 
   /* ── Right panel ── */
-  .right-panel { padding: 24px; overflow-y: auto; }
+  .right-panel { padding: 24px; overflow-y: auto; display:flex; flex-direction:column; gap:20px; }
 
-  .status-card {
+  .card {
     background: var(--surface-0); border: 1px solid var(--border); border-radius: 8px;
-    padding: 20px; margin-bottom: 20px;
+    padding: 20px;
   }
+  .card h3 {
+    font-size: 13px; font-weight: 700; margin: 0 0 14px;
+    text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim);
+  }
+
+  /* Usage meters */
+  .usage-meter { margin-bottom: 14px; }
+  .usage-meter:last-child { margin-bottom: 0; }
+  .usage-meter-label { display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px; }
+  .usage-meter-label span:first-child { color: var(--text-dim); font-weight: 600; }
+  .usage-meter-label span:last-child { font-family: var(--mono); }
+  .usage-bar { height:8px; background:var(--surface-3); border-radius:4px; overflow:hidden; }
+  .usage-bar-fill { height:100%; border-radius:4px; transition: width 0.3s; }
+  .usage-bar-fill.low { background: var(--green); }
+  .usage-bar-fill.mid { background: var(--yellow); }
+  .usage-bar-fill.high { background: var(--red); }
+  .usage-reset { font-size:11px; color:var(--text-dim); margin-top:3px; }
+  .usage-empty { font-size:13px; color:var(--text-dim); font-style:italic; }
+
+  /* Status rows */
   .status-row {
     display: flex; align-items: center; gap: 12px; padding: 8px 0;
     font-size: 14px;
   }
   .status-row + .status-row { border-top: 1px solid var(--border); }
-  .status-label { color: var(--text-dim); width: 100px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .status-label { color: var(--text-dim); width: 90px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
   .status-value { flex: 1; font-family: var(--mono); font-size: 14px; }
 
-  .badge-dim { background: var(--surface-2); color: var(--text-dim); }
-
-  .countdown {
-    font-family: var(--mono); font-size: 28px; font-weight: 700;
-    color: var(--accent); margin: 8px 0;
+  .deadline-countdown {
+    font-family: var(--mono); font-size: 32px; font-weight: 700;
+    color: var(--accent); text-align:center; padding: 12px 0;
   }
 
-  /* ── History table ── */
-  .history-card {
-    background: var(--surface-0); border: 1px solid var(--border); border-radius: 8px;
-  }
-  .history-header {
-    padding: 14px 18px; border-bottom: 1px solid var(--border);
-    font-size: 14px; font-weight: 600;
-  }
+  /* History table */
   .history-table { width: 100%; border-collapse: collapse; }
   .history-table th {
     padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700;
@@ -134,28 +111,6 @@
     opacity: 0; transition: opacity 0.3s;
   }
   .flash-msg.show { opacity: 1; }
-
-  /* ── Enable toggle ── */
-  .toggle-row {
-    display: flex; align-items: center; gap: 12px; padding: 10px 0;
-  }
-  .toggle-switch {
-    position: relative; width: 44px; height: 24px; flex-shrink: 0;
-  }
-  .toggle-switch input { opacity: 0; width: 0; height: 0; }
-  .toggle-slider {
-    position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
-    background: var(--surface-3); border: 1px solid var(--border); border-radius: 12px;
-    transition: all 0.2s;
-  }
-  .toggle-slider:before {
-    content: ''; position: absolute; height: 18px; width: 18px;
-    left: 2px; bottom: 2px; background: var(--text-dim); border-radius: 50%;
-    transition: all 0.2s;
-  }
-  .toggle-switch input:checked + .toggle-slider { background: #1e3a5f; border-color: var(--accent); }
-  .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); background: var(--accent); }
-  .toggle-label { font-size: 14px; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -165,160 +120,80 @@
 
 <div class="main">
   <div class="page-header">
-    <h2>Nightly Schedule</h2>
+    <h2>Schedule</h2>
   </div>
 
   <div class="content-area">
-    <!-- Left: Config -->
+    <!-- Left: Controls -->
     <div class="controls">
-      <!-- Enable toggle -->
-      <div class="toggle-row">
-        <label class="toggle-switch">
-          <input type="checkbox" id="enableToggle">
-          <span class="toggle-slider"></span>
-        </label>
-        <span class="toggle-label" id="toggleLabel">Disabled</span>
-      </div>
-
-      <!-- Time -->
-      <div class="field">
-        <label>Run at (daily)</label>
-        <input type="time" id="scheduleTime" value="02:00">
-        <div class="hint">Pipeline will run at this time every day when enabled</div>
-      </div>
-
-      <hr class="divider">
-
-      <!-- Phases -->
       <div>
-        <div class="section-title">Phases</div>
-        <div class="phase-grid" id="phaseGrid">
-          <label class="phase-toggle">
-            <input type="checkbox" data-phase="schema" checked>
-            <span class="phase-num">1</span>
-            <span class="phase-name">Schema</span>
-            <span class="phase-desc">Initialize indexes</span>
-          </label>
-          <label class="phase-toggle">
-            <input type="checkbox" data-phase="ingest" checked>
-            <span class="phase-num">2</span>
-            <span class="phase-name">Ingest</span>
-            <span class="phase-desc">Import CPG</span>
-          </label>
-          <label class="phase-toggle">
-            <input type="checkbox" data-phase="link" checked>
-            <span class="phase-num">3</span>
-            <span class="phase-name">Link</span>
-            <span class="phase-desc">Cross-service linking</span>
-          </label>
-          <label class="phase-toggle">
-            <input type="checkbox" data-phase="scan" checked>
-            <span class="phase-num">4</span>
-            <span class="phase-name">Quick Scan</span>
-            <span class="phase-desc">AI decision extraction</span>
-          </label>
-          <label class="phase-toggle">
-            <input type="checkbox" data-phase="sessions" checked>
-            <span class="phase-num">5</span>
-            <span class="phase-name">Sessions</span>
-            <span class="phase-desc">Session decision ingestion</span>
-          </label>
+        <div class="section-title">Usage Limit</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <input type="range" id="usageLimitSlider" min="0" max="100" value="80" style="flex:1;accent-color:var(--accent);">
+          <span id="usageLimitLabel" style="font-family:var(--mono);font-size:14px;font-weight:700;min-width:40px;text-align:right;">80%</span>
         </div>
+        <div class="hint">Stop pipeline when session usage reaches this percentage.</div>
       </div>
 
-      <hr class="divider">
-
-      <!-- Goals -->
       <div>
-        <div class="section-title">Scan Goals</div>
-        <div class="goal-list" id="goalList"></div>
-        <div class="goal-add-row">
-          <input type="text" id="goalInput" placeholder="Enter analysis goal...">
-          <button onclick="addGoal()">+ Add</button>
-        </div>
-        <div class="suggestions">
-          <span class="suggestion" onclick="addGoalDirect('order flow and payments')">Orders</span>
-          <span class="suggestion" onclick="addGoalDirect('coupon system')">Coupons</span>
-          <span class="suggestion" onclick="addGoalDirect('cart and customization')">Cart</span>
-          <span class="suggestion" onclick="addGoalDirect('menu and vendor availability')">Menu</span>
-          <span class="suggestion" onclick="addGoalDirect('auth and user profile')">Users</span>
-          <span class="suggestion" onclick="addGoalDirect('full business logic analysis')">All</span>
-        </div>
+        <div class="section-title">Work Start Time</div>
+        <input type="time" id="deadlineTime" value="">
+        <div class="hint">Ensures usage is 0% when you start working. Pipeline stops when the current session window would bleed into this time.</div>
       </div>
 
       <hr class="divider">
 
-      <!-- Parameters -->
-      <div class="row">
-        <div class="field">
-          <label>Repo</label>
-          <select id="repoSelect"><option value="">All repos</option></select>
-        </div>
-        <div class="field">
-          <label>Concurrency</label>
-          <input type="number" id="concurrencyInput" value="2" min="1" max="8">
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="field">
-          <label>Owner</label>
-          <input type="text" id="ownerInput" value="me" placeholder="me">
-        </div>
-      </div>
-
-      <!-- Flags -->
-      <div>
-        <div class="checkbox-field">
-          <input type="checkbox" id="forceCheck">
-          <label for="forceCheck">Force — re-analyze all</label>
-        </div>
-        <div class="checkbox-field" style="margin-top:6px">
-          <input type="checkbox" id="deepCheck">
-          <label for="deepCheck">Deep check — re-analyze dependency changes too</label>
-        </div>
-        <div class="checkbox-field" style="margin-top:6px">
-          <input type="checkbox" id="dryRunCheck">
-          <label for="dryRunCheck">Dry run — no database writes</label>
-        </div>
+      <div id="actionBtn">
+        <button class="btn-run" onclick="runPipeline()">Run Pipeline</button>
       </div>
 
       <hr class="divider">
 
-      <button class="btn-primary" id="saveBtn" onclick="saveSchedule()">
-        Save Schedule
-      </button>
+      <div class="hint" style="line-height:1.6">
+        Pipeline stops when <strong>either</strong>: session usage hits the limit, or the current 5h window would reset after your work start time.
+      </div>
     </div>
 
-    <!-- Right: Status & History -->
+    <!-- Right: Usage, Status, History -->
     <div class="right-panel">
-      <div class="status-card">
+      <!-- Usage -->
+      <div class="card">
+        <h3>API Usage</h3>
+        <div id="usageContent">
+          <div class="usage-empty">No usage data yet — will appear once pipeline makes API calls</div>
+        </div>
+      </div>
+
+      <!-- Status -->
+      <div class="card">
+        <h3>Status</h3>
         <div class="status-row">
-          <span class="status-label">Status</span>
-          <span class="status-value" id="statusValue"><span class="badge badge-dim">DISABLED</span></span>
+          <span class="status-label">Pipeline</span>
+          <span class="status-value" id="pipelineStatus"><span class="badge badge-dim">idle</span></span>
         </div>
         <div class="status-row">
-          <span class="status-label">Next Run</span>
-          <span class="status-value" id="nextRunValue">--</span>
+          <span class="status-label">Running</span>
+          <span class="status-value" id="runningTime">--</span>
         </div>
-        <div class="status-row" style="border-top:none; padding-top:0;">
-          <span class="status-label"></span>
-          <div class="countdown" id="countdown">--:--:--</div>
+        <div class="status-row">
+          <span class="status-label">Work Start</span>
+          <span class="status-value" id="deadlineValue">Not set</span>
+        </div>
+        <div class="status-row" id="sessionResetRow" style="display:none;">
+          <span class="status-label">Session Reset</span>
+          <span class="status-value" id="sessionResetValue">--</span>
         </div>
         <div class="status-row">
           <span class="status-label">Last Run</span>
           <span class="status-value" id="lastRunValue">--</span>
         </div>
-        <div class="status-row">
-          <span class="status-label">Pipeline</span>
-          <span class="status-value" id="pipelineStatus">--</span>
-        </div>
       </div>
 
-      <div class="history-card">
-        <div class="history-header">Run History</div>
+      <!-- History -->
+      <div class="card" style="padding:0;">
+        <h3 style="padding:20px 20px 14px;">Run History</h3>
         <div id="historyBody">
-          <div class="history-empty">No scheduled runs yet</div>
+          <div class="history-empty">No runs yet</div>
         </div>
       </div>
     </div>
@@ -328,135 +203,68 @@
 <div class="flash-msg" id="flashMsg">Saved</div>
 
 <script>
-  let goals = []
-  let nextRunAt = null
-  let countdownInterval = null
+  let pollInterval = null
 
   // ── Init ──
   fetch('/api/schedule').then(r => r.json()).then(data => {
     if (data.config) {
-      const cfg = data.config
-      document.getElementById('enableToggle').checked = cfg.enabled
-      document.getElementById('scheduleTime').value = cfg.time || '02:00'
-      updateToggleLabel(cfg.enabled)
-
-      if (cfg.pipelineConfig) {
-        const pc = cfg.pipelineConfig
-        goals = pc.goals || []
-        renderGoals()
-        document.getElementById('concurrencyInput').value = pc.concurrency || 2
-        document.getElementById('ownerInput').value = pc.owner || 'me'
-        if (pc.repo) document.getElementById('repoSelect').value = pc.repo
-        document.getElementById('forceCheck').checked = !!pc.force
-        document.getElementById('deepCheck').checked = !!pc.deepCheck
-        document.getElementById('dryRunCheck').checked = !!pc.dryRun
-
-        // Uncheck skipped phases
-        for (const sp of pc.skipPhases || []) {
-          const cb = document.querySelector(`#phaseGrid input[data-phase="${sp}"]`)
-          if (cb) cb.checked = false
-        }
-      }
+      document.getElementById('deadlineTime').value = data.config.deadline || ''
+      const limit = data.config.usageLimit ?? 80
+      document.getElementById('usageLimitSlider').value = limit
+      document.getElementById('usageLimitLabel').textContent = limit + '%'
     }
-
-    nextRunAt = data.nextRunAt
     updateStatus(data)
+    updateUsage(data.usage)
     renderHistory(data.history || [])
-    startCountdown()
+    startPolling()
   }).catch(() => {})
 
-  // Load repos
-  fetch('/api/scan/config').then(r => r.json()).then(data => {
-    const sel = document.getElementById('repoSelect')
-    for (const repo of data.repos || []) {
-      const opt = document.createElement('option')
-      opt.value = repo.name
-      opt.textContent = `${repo.name} (${repo.type})`
-      sel.appendChild(opt)
-    }
-  }).catch(() => {})
-
-  // ── Toggle ──
-  document.getElementById('enableToggle').addEventListener('change', function() {
-    updateToggleLabel(this.checked)
+  // Slider live label update
+  document.getElementById('usageLimitSlider').addEventListener('input', (e) => {
+    document.getElementById('usageLimitLabel').textContent = e.target.value + '%'
   })
+  // Auto-save on slider release
+  document.getElementById('usageLimitSlider').addEventListener('change', saveConfig)
+  document.getElementById('deadlineTime').addEventListener('change', saveConfig)
 
-  function updateToggleLabel(enabled) {
-    document.getElementById('toggleLabel').textContent = enabled ? 'Enabled' : 'Disabled'
-    document.getElementById('toggleLabel').style.color = enabled ? 'var(--green)' : 'var(--text-dim)'
-  }
-
-  // ── Goals ──
-  function renderGoals() {
-    const list = document.getElementById('goalList')
-    list.innerHTML = ''
-    goals.forEach((g, i) => {
-      const div = document.createElement('div')
-      div.className = 'goal-item'
-      div.innerHTML = `<span class="goal-text">${escHtml(g)}</span><button class="goal-remove" onclick="removeGoal(${i})">&times;</button>`
-      list.appendChild(div)
-    })
-  }
-  function addGoal() {
-    const input = document.getElementById('goalInput')
-    const val = input.value.trim()
-    if (!val) return
-    goals.push(val)
-    input.value = ''
-    renderGoals()
-  }
-  function addGoalDirect(text) {
-    if (!goals.includes(text)) { goals.push(text); renderGoals() }
-  }
-  function removeGoal(idx) {
-    goals.splice(idx, 1)
-    renderGoals()
-  }
-  document.getElementById('goalInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); addGoal() }
-  })
-  function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
-
-  // ── Save ──
-  async function saveSchedule() {
-    const skipPhases = []
-    document.querySelectorAll('#phaseGrid input[type="checkbox"]').forEach(cb => {
-      if (!cb.checked) skipPhases.push(cb.dataset.phase)
-    })
-
-    const payload = {
-      enabled: document.getElementById('enableToggle').checked,
-      time: document.getElementById('scheduleTime').value,
-      pipelineConfig: {
-        goals,
-        concurrency: parseInt(document.getElementById('concurrencyInput').value) || 2,
-        owner: document.getElementById('ownerInput').value.trim() || 'me',
-        repo: document.getElementById('repoSelect').value || null,
-        force: document.getElementById('forceCheck').checked,
-        deepCheck: document.getElementById('deepCheck').checked,
-        dryRun: document.getElementById('dryRunCheck').checked,
-        skipPhases,
-      },
-    }
-
+  async function saveConfig() {
+    const deadline = document.getElementById('deadlineTime').value || null
+    const usageLimit = parseInt(document.getElementById('usageLimitSlider').value)
     try {
       const res = await fetch('/api/schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ deadline, usageLimit }),
       })
+      if (res.ok) flash('Saved')
+      else flash('Failed to save', true)
+    } catch (err) {
+      flash('Error: ' + err.message, true)
+    }
+  }
+
+  // ── Run pipeline ──
+  async function runPipeline() {
+    try {
+      await saveConfig()
+      const res = await fetch('/api/schedule/run', { method: 'POST' })
       const data = await res.json()
       if (res.ok) {
-        nextRunAt = data.nextRunAt
-        flash('Schedule saved')
-        // Refresh status
-        fetch('/api/schedule').then(r => r.json()).then(d => {
-          updateStatus(d)
-          renderHistory(d.history || [])
-        })
+        flash(`Pipeline started: ${data.stepCount} steps`)
+        refreshStatus()
       } else {
-        flash(data.error || 'Failed to save', true)
+        flash(data.error || 'Failed to start', true)
       }
+    } catch (err) {
+      flash('Error: ' + err.message, true)
+    }
+  }
+
+  async function stopPipeline() {
+    try {
+      await fetch('/api/full-pipeline/stop', { method: 'POST' })
+      flash('Pipeline stopped')
+      refreshStatus()
     } catch (err) {
       flash('Error: ' + err.message, true)
     }
@@ -471,84 +279,124 @@
     setTimeout(() => el.classList.remove('show'), 2000)
   }
 
+  // ── Usage ──
+  function updateUsage(usage) {
+    const el = document.getElementById('usageContent')
+    if (!usage) {
+      el.innerHTML = '<div class="usage-empty">No usage data yet — will appear once pipeline makes API calls</div>'
+      return
+    }
+
+    const sessionPct = Math.round(usage.session_utilization * 100)
+    const weeklyPct = Math.round(usage.weekly_utilization * 100)
+    const sessionResetStr = usage.session_reset ? new Date(usage.session_reset).toLocaleTimeString() : '--'
+    const weeklyResetStr = usage.weekly_reset ? new Date(usage.weekly_reset).toLocaleDateString() + ' ' + new Date(usage.weekly_reset).toLocaleTimeString() : '--'
+    const statusBadge = usage.status === 'rejected'
+      ? '<span class="badge badge-red">RATE LIMITED</span>'
+      : usage.status === 'allowed_warning'
+      ? '<span class="badge badge-yellow">WARNING</span>'
+      : '<span class="badge badge-green">OK</span>'
+
+    el.innerHTML = `
+      <div style="margin-bottom:10px">${statusBadge} <span style="font-size:11px;color:var(--text-dim);margin-left:6px">Updated ${new Date(usage.updatedAt).toLocaleTimeString()}</span></div>
+      <div class="usage-meter">
+        <div class="usage-meter-label"><span>Session (5h)</span><span>${sessionPct}%</span></div>
+        <div class="usage-bar"><div class="usage-bar-fill ${sessionPct < 50 ? 'low' : sessionPct < 80 ? 'mid' : 'high'}" style="width:${sessionPct}%"></div></div>
+        <div class="usage-reset">Resets ${sessionResetStr}</div>
+      </div>
+      <div class="usage-meter">
+        <div class="usage-meter-label"><span>Weekly (7d)</span><span>${weeklyPct}%</span></div>
+        <div class="usage-bar"><div class="usage-bar-fill ${weeklyPct < 50 ? 'low' : weeklyPct < 80 ? 'mid' : 'high'}" style="width:${weeklyPct}%"></div></div>
+        <div class="usage-reset">Resets ${weeklyResetStr}</div>
+      </div>
+    `
+  }
+
   // ── Status ──
   function updateStatus(data) {
-    const enabled = data.config?.enabled
-    const statusEl = document.getElementById('statusValue')
-    if (enabled) {
-      statusEl.innerHTML = '<span class="badge badge-green">ENABLED</span> &mdash; daily at ' + escHtml(data.config.time)
+    const ps = data.pipelineStatus || 'idle'
+    const psCls = ps === 'running' ? 'badge-yellow' : ps === 'done' ? 'badge-green' : ps === 'error' ? 'badge-red' : 'badge-dim'
+    document.getElementById('pipelineStatus').innerHTML = `<span class="badge ${psCls}">${ps}</span>`
+
+    const runEl = document.getElementById('runningTime')
+    if (ps === 'running' && data.pipelineStartedAt) {
+      runEl.textContent = formatDuration(Date.now() - data.pipelineStartedAt)
     } else {
-      statusEl.innerHTML = '<span class="badge badge-dim">DISABLED</span>'
+      runEl.textContent = '--'
     }
 
-    const nextEl = document.getElementById('nextRunValue')
-    if (data.nextRunAt) {
-      nextRunAt = data.nextRunAt
-      nextEl.textContent = new Date(data.nextRunAt).toLocaleString()
+    const dlEl = document.getElementById('deadlineValue')
+    const resetRow = document.getElementById('sessionResetRow')
+    const resetEl = document.getElementById('sessionResetValue')
+    const deadline = data.config?.deadline
+    dlEl.textContent = deadline || 'Not set'
+
+    // Show session reset vs deadline status
+    if (data.usage?.session_reset && deadline) {
+      resetRow.style.display = 'flex'
+      const resetTime = new Date(data.usage.session_reset)
+      const [dh, dm] = deadline.split(':').map(Number)
+      const deadlineDate = new Date()
+      deadlineDate.setHours(dh, dm, 0, 0)
+      const safe = resetTime.getTime() <= deadlineDate.getTime()
+      resetEl.innerHTML = `${resetTime.toLocaleTimeString()} ${safe
+        ? '<span class="badge badge-green">safe</span>'
+        : '<span class="badge badge-red">will bleed</span>'}`
     } else {
-      nextRunAt = null
-      nextEl.textContent = '--'
-      document.getElementById('countdown').textContent = '--:--:--'
+      resetRow.style.display = 'none'
     }
 
-    // Last run
+    const btnEl = document.getElementById('actionBtn')
+    if (ps === 'running') {
+      btnEl.innerHTML = '<button class="btn-stop" onclick="stopPipeline()">Stop Pipeline</button>'
+    } else {
+      btnEl.innerHTML = '<button class="btn-run" onclick="runPipeline()">Run Pipeline</button>'
+    }
+
     const lastEl = document.getElementById('lastRunValue')
     const history = data.history || []
     if (history.length > 0) {
       const last = history[0]
       const date = new Date(last.startedAt).toLocaleString()
-      const badgeCls = last.status === 'done' ? 'badge-green' : last.status === 'skipped' ? 'badge-yellow' : 'badge-red'
-      const dur = last.duration > 0 ? ` (${Math.round(last.duration / 1000)}s)` : ''
+      const badgeCls = last.status === 'done' ? 'badge-green'
+        : (last.status === 'deadline-stopped' || last.status === 'usage-limit') ? 'badge-yellow'
+        : 'badge-red'
+      const dur = last.duration > 0 ? ` (${formatDuration(last.duration)})` : ''
       lastEl.innerHTML = `<span class="badge ${badgeCls}">${last.status}</span> ${date}${dur}`
     } else {
       lastEl.textContent = '--'
     }
-
-    // Pipeline status
-    const pipEl = document.getElementById('pipelineStatus')
-    const ps = data.pipelineStatus || 'idle'
-    const psCls = ps === 'running' ? 'badge-yellow' : ps === 'done' ? 'badge-green' : ps === 'error' ? 'badge-red' : 'badge-dim'
-    pipEl.innerHTML = `<span class="badge ${psCls}">${ps}</span>`
   }
 
-  // ── Countdown ──
-  function startCountdown() {
-    if (countdownInterval) clearInterval(countdownInterval)
-    countdownInterval = setInterval(() => {
-      const el = document.getElementById('countdown')
-      if (!nextRunAt) { el.textContent = '--:--:--'; return }
-      const diff = nextRunAt - Date.now()
-      if (diff <= 0) {
-        el.textContent = 'Running...'
-        // Refresh status
-        fetch('/api/schedule').then(r => r.json()).then(d => {
-          nextRunAt = d.nextRunAt
-          updateStatus(d)
-          renderHistory(d.history || [])
-        })
-        return
-      }
-      const h = Math.floor(diff / 3600000)
-      const m = Math.floor((diff % 3600000) / 60000)
-      const s = Math.floor((diff % 60000) / 1000)
-      el.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
-    }, 1000)
+  // ── Polling ──
+  function startPolling() {
+    if (pollInterval) clearInterval(pollInterval)
+    pollInterval = setInterval(refreshStatus, 3000)
+  }
+
+  function refreshStatus() {
+    fetch('/api/schedule').then(r => r.json()).then(data => {
+      updateStatus(data)
+      updateUsage(data.usage)
+      renderHistory(data.history || [])
+    }).catch(() => {})
   }
 
   // ── History ──
   function renderHistory(history) {
     const body = document.getElementById('historyBody')
     if (!history || history.length === 0) {
-      body.innerHTML = '<div class="history-empty">No scheduled runs yet</div>'
+      body.innerHTML = '<div class="history-empty">No runs yet</div>'
       return
     }
-    let html = '<table class="history-table"><thead><tr><th>Date</th><th>Status</th><th>Duration</th><th>Goals</th></tr></thead><tbody>'
+    let html = '<table class="history-table"><thead><tr><th>Date</th><th>Status</th><th>Duration</th></tr></thead><tbody>'
     for (const run of history) {
       const date = new Date(run.startedAt).toLocaleString()
-      const badgeCls = run.status === 'done' ? 'badge-green' : run.status === 'skipped' ? 'badge-yellow' : 'badge-red'
+      const badgeCls = run.status === 'done' ? 'badge-green'
+        : run.status === 'deadline-stopped' ? 'badge-yellow'
+        : 'badge-red'
       const dur = run.duration > 0 ? formatDuration(run.duration) : '--'
-      const goalsStr = (run.goals || []).join(', ') || '--'
-      html += `<tr><td>${date}</td><td><span class="badge ${badgeCls}">${run.status}</span></td><td>${dur}</td><td style="font-family:var(--sans);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(goalsStr)}">${escHtml(goalsStr)}</td></tr>`
+      html += `<tr><td>${date}</td><td><span class="badge ${badgeCls}">${run.status}</span></td><td>${dur}</td></tr>`
     }
     html += '</tbody></table>'
     body.innerHTML = html
@@ -558,7 +406,9 @@
     const sec = Math.floor(ms / 1000)
     if (sec < 60) return sec + 's'
     const min = Math.floor(sec / 60)
-    return min + 'm ' + (sec % 60) + 's'
+    if (min < 60) return min + 'm ' + (sec % 60) + 's'
+    const hr = Math.floor(min / 60)
+    return hr + 'h ' + (min % 60) + 'm'
   }
 </script>
 </body>

@@ -133,6 +133,12 @@
         <div style="font-size:12px;color:var(--text-dim);margin-top:10px">
           Full Setup = Schema + Ingest all CPG files + Link repos &amp; services
         </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border-subtle)">
+          <span style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap">Joern Memory</span>
+          <input type="range" id="joernMemPct" min="50" max="95" value="90" step="5" style="flex:1;accent-color:var(--accent)" oninput="document.getElementById('joernMemLabel').textContent=this.value+'%'">
+          <span id="joernMemLabel" style="font-family:var(--mono);font-size:13px;font-weight:600;min-width:36px;text-align:right">90%</span>
+          <span style="font-size:11px;color:var(--text-dim)">of system RAM</span>
+        </div>
       </div>
     </div>
 
@@ -303,9 +309,10 @@ async function generateCpg(repo){
   badge.textContent='generating CPG...'
 
   try {
+    const memPct=parseInt(document.getElementById('joernMemPct').value)||90
     const res=await fetch('/api/system/generate-cpg',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({repo})
+      body:JSON.stringify({repo,memoryPct:memPct})
     })
     if(!res.ok){const e=await res.json();logEl.textContent='Error: '+(e.error||'Failed');badge.className='badge badge-red';badge.textContent='error';return}
 

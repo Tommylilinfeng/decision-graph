@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "Context Chain — MCP server for design decisions. grep finds what code does; we record why it was written that way.",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "bin": {
     "context-chain": "./bin/context-chain.js"
   },

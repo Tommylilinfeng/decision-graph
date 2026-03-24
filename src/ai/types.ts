@@ -22,6 +22,16 @@ export interface RateLimitInfo {
   resetAt: string
 }
 
+/** Unified rate limit info from anthropic-ratelimit-unified-* headers */
+export interface UnifiedRateLimitInfo {
+  session_utilization: number
+  session_reset: number
+  weekly_utilization: number
+  weekly_reset: number
+  status: string
+  updatedAt: number
+}
+
 export interface AIProvider {
   /** Display name for logging */
   name: string
@@ -40,6 +50,9 @@ export interface AIProvider {
 
   /** Latest rate limit info (Anthropic API only) */
   rateLimit?: RateLimitInfo
+
+  /** Unified rate limit info (CLI-style usage tracking) */
+  unifiedRateLimit?: UnifiedRateLimitInfo
 }
 
 /**

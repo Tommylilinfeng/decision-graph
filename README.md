@@ -1,217 +1,71 @@
 # Context Chain
 
-> **grep finds what code does. We record why it was written that way.**
+A local knowledge graph that extracts design decisions from your codebase, serves them to your coding AI via MCP, and bridges the context window gap among teammates.
 
----
+Existing context engineering tools (OpenSpec, Git-AI, Dexicon) capture knowledge at the spec or repo level. Context Chain goes deeper:
 
-## What is this
+- **Function-level anchoring** — decisions are tied to specific functions via Joern CPG, not floating above the repo
+- **Automatic staleness detection** — code changes flag affected decisions; knowledge doesn't silently rot
+- **Decision-level extraction** — not prompt summaries or raw transcripts, but _what was chosen, what was rejected, and why_
+- **Decision relationships** — `CAUSED_BY`, `DEPENDS_ON`, `CONFLICTS_WITH` edges across a graph, not flat files
+- **Runs overnight on your subscription** — uses `claude -p` (Claude CLI), no API costs, doesn't eat your daytime quota
 
-When developers work with AI, conversations contain critical design decisions — why approach A was chosen over B, what tradeoffs were made, what alternatives were considered. But these insights vanish when the chat window closes.
-
-Context Chain automatically extracts design decisions from your codebase, stores them as a knowledge graph, and serves them to Claude Code / Cursor via MCP.
-
-**Core architecture (3 layers):**
-
-1. **Graph layer** — Memgraph stores code entities, decisions, and relationships. Five-slot retrieval model for precise context lookup.
-2. **Building block layer** — `analyze_function`: input a function + config, query graph for context, read source code, call AI, output decisions. Highly configurable via templates.
-3. **Runner layer** — Orchestrates building block execution. Built-in full-scan runner (pause/resume), cold-start pipeline (4-round goal-driven), and Quick Scan (zero-config one-click).
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- **Node.js** v18+
-- **Docker** (for Memgraph)
-- **Joern** — code structure analysis (`brew install joern` on macOS)
-- **Claude CLI** or **Anthropic API key** — for AI-powered analysis
-
-```bash
-# Install Claude CLI (if using subscription)
-npm install -g @anthropic-ai/claude-code
-claude login
-
-# Or use Anthropic API instead — configure in the Dashboard
+```
+Codebase → Joern CPG → LLM extracts decisions per function
+    → Memgraph (graph DB) → MCP Server (9 tools)
+        → Claude Code queries context while you code
 ```
 
-### Setup
+**Website:** [usecontextchain.com](https://usecontextchain.com)
+
+---
+
+## Roadmap
+
+| Area | What's coming |
+|------|--------------|
+| Consumption layer | Immersive KT system and team knowledge map — help _people_ understand the codebase, not just AI |
+| Agent support | Currently Claude Code; adding Cursor, Windsurf, Cline, Copilot, and other MCP-compatible agents |
+| Multi-source ingestion | Slack threads, Notion docs, meeting transcripts — not just code and AI sessions |
+| Spec-driven workflow | OpenSpec-style proposal → spec → design → implement, with decisions auto-anchored after implementation |
+
+---
+
+## Quick Start
 
 ```bash
-# 1. Install dependencies
-npm install
+# Prerequisites: Node.js 18+, Docker, Joern, Claude CLI
+git clone https://github.com/Tommylilinfeng/context-chain.git
+cd context-chain && npm install
 
-# 2. Start Memgraph
+# Start Memgraph
 docker compose up -d
 
-# 3. Start the Dashboard
+# Start the Dashboard
 npm run dashboard
-# Open http://localhost:3001
+# → http://localhost:3001
 ```
 
-### First Run (Dashboard)
+From the Dashboard:
 
-1. Go to **System** page — add your repos (name, path, type)
-2. Generate CPG files with Joern for each repo
-3. Click **Full Setup** on the System page (schema + ingest + link)
-4. Go to **Quick Scan** — select a repo, click Scan
-5. Design decisions appear automatically — no goal or business context needed
+1. **System** → Add your repo (name, path, language)
+2. **System** → Generate CPG (Joern code analysis)
+3. **System** → Full Setup (schema + import code structure)
+4. **Quick Scan** → Pick a repo, click Scan → decisions appear
 
-### First Run (CLI)
+Or from CLI:
 
 ```bash
-# 1. Initialize schema
-npm run db:schema
-
-# 2. Import code structure (requires Joern CPG)
-npm run ingest:cpg -- --file data/your-repo.json
-
-# 3. Try analyzing a single function
-npm run analyze -- --function createOrder --file store/orderStore.js --repo my-repo
-
-# 4. Full scan (Ctrl+C to pause, --continue to resume)
-npm run analyze -- --repo my-repo --cleanup
-
-# 5. Start MCP Server (Claude Code / Cursor auto-connects)
-npm run mcp
+npm run db:schema                                         # init schema
+npm run ingest:cpg -- --file data/your-repo.json          # import code structure
+npm run analyze -- --repo my-repo                         # full scan (Ctrl+C to pause, --continue to resume)
+npm run mcp                                               # start MCP server
 ```
-
----
-
-## Configuration
-
-Create `ckg.config.json` in the project root (see `ckg.config.example.json`):
-
-```json
-{
-  "project": "my-project",
-  "ai": {
-    "provider": "claude-cli"
-  },
-  "repos": [
-    {
-      "name": "my-service",
-      "path": "/absolute/path/to/repo",
-      "type": "backend",
-      "cpgFile": "data/my-service.json",
-      "packages": []
-    }
-  ]
-}
-```
-
-**AI providers:**
-- `claude-cli` — Uses Claude CLI subscription (no API cost). Requires `claude login`.
-- `anthropic-api` — Direct API calls. Set `apiKey` in config or Dashboard.
-
----
-
-## analyze_function — Core Building Block
-
-All decision extraction goes through this module. Highly configurable:
-
-### Configuration
-
-| Dimension | Options |
-|-----------|---------|
-| Context depth | `caller_depth` (0-2), `callee_depth` (0-2), `include_cross_repo`, `include_table_access` |
-| Code granularity | `target_code` (full/truncated/signature_only), `target_max_lines`, `include_file_context` |
-| Output control | `finding_types` (decision/suboptimal/bug), `max_decisions`, `summary_length`, `language` |
-| Prompt | `prompt_template`, `system_prompt`, `custom_context` |
-| AI | `ai_provider`, `model`, `timeout_ms` |
-
-### Template System
-
-Templates are JSON files with inheritance:
-
-```
-templates/
-  _default.json           <- built-in defaults
-  quick-scan.json         <- extends _default, overrides specific fields
-  deep-analysis.json
-  your-custom.json
-```
-
-```json
-{
-  "name": "Quick Scan",
-  "extends": "_default",
-  "caller_depth": 0,
-  "callee_depth": 0,
-  "finding_types": ["decision"],
-  "max_decisions": 2
-}
-```
-
-### CLI Usage
-
-```bash
-# List available templates
-npm run analyze -- --list-templates
-
-# Single function analysis
-npm run analyze -- --function addItem --file store/cartStore.js --repo my-repo
-
-# With specific template
-npm run analyze -- --function addItem --file store/cartStore.js --repo my-repo --template deep-analysis
-
-# Full scan (all functions in a repo)
-npm run analyze -- --repo my-repo
-npm run analyze -- --repo my-repo --continue      # resume from checkpoint
-npm run analyze -- --repo my-repo --force --cleanup  # force re-analyze + cleanup
-
-# Budget control
-npm run analyze -- --repo my-repo --budget 500000
-
-# CLI config overrides
-npm run analyze -- --repo my-repo --caller-depth 2 --include-tables --language en
-```
-
-### As a Library
-
-```typescript
-import { analyzeFunction, loadTemplate } from './core'
-
-const result = await analyzeFunction(
-  { functionName: 'createOrder', filePath: 'store/orderStore.js', repo: 'my-repo', repoPath: '/path/to/repo' },
-  { caller_depth: 2, include_table_access: true },
-  'deep-analysis'
-)
-// result.decisions — PendingDecisionOutput[]
-// result.metadata — { template_used, caller_count, callee_count, token_usage, duration_ms }
-```
-
----
-
-## MCP Server — 9 Tools
-
-| Tool | Description |
-|------|-------------|
-| `get_code_structure` | List functions/services in a file |
-| `get_callers` | Who calls this function (upstream) |
-| `get_callees` | What this function calls (downstream) |
-| `search_decisions_by_keyword` | Keyword search with inverted index + full-text fallback |
-| `get_context_for_code` | Five-slot retrieval with progressive disclosure |
-| `search_decisions_semantic` | Vector similarity search (requires embedding provider) |
-| `get_decision_relationships` | Explore causal/dependency/conflict chains |
-| `get_cross_repo_dependencies` | Cross-repo and cross-service dependencies |
-| `report_context_usage` | Feedback loop: which decisions were actually used |
-
-### Five-Slot Retrieval
-
-`get_context_for_code` queries five channels in priority order:
-
-1. **P0 Exact anchor** — function-level ANCHORED_TO match
-2. **P1 Fuzzy anchor** — file-level APPROXIMATE_TO match
-3. **P2 Keywords** — keyword array CONTAINS match
-4. **P3 Relationship expansion** — one-hop CAUSED_BY/DEPENDS_ON/CONFLICTS_WITH from P0-P2 hits
-5. **P4 Semantic fallback** — vector similarity (requires embedding config)
-
-Progressive disclosure: returns summary list by default, `detail=true` for full content, `decision_id` for single decision + 2-hop chain.
 
 ### Connect to Claude Code
 
 Add to your project's `.mcp.json`:
+
 ```json
 {
   "mcpServers": {
@@ -223,54 +77,109 @@ Add to your project's `.mcp.json`:
 }
 ```
 
+Or use the install script: `bash scripts/install-hooks.sh /path/to/your/project`
+
+Now when Claude Code works on your codebase, it can query "why was this written this way?" and get real answers.
+
 ---
 
-## Dashboard
+## What gets extracted
+
+Not descriptions of what code does (any AI can read source for that) — but **decisions**: what was chosen, what was rejected, why, and what tradeoffs were accepted. Each decision is anchored to specific functions and linked to related decisions. When your coding AI later touches that function, relevant decisions surface automatically via MCP.
+
+---
+
+## Five-slot retrieval
+
+When your coding AI asks for context, Context Chain searches five channels in priority order:
+
+1. **Code anchor** — exact function/file match in the graph
+2. **Keywords** — inverted index match (business terms like "refund", "auth" that don't exist in code)
+3. **Decision relationships** — one-hop expansion along CAUSED_BY / DEPENDS_ON / CONFLICTS_WITH edges
+4. **Semantic similarity** — vector search fallback (catches "idempotency" when you searched "prevent duplicate charges")
+5. **Metadata filters** — staleness, recency, owner — applied on top of all results
+
+Progressive disclosure: summaries first, full content on demand.
+
+---
+
+## Core architecture
+
+### analyze_function — the building block
+
+All decision extraction goes through one module: give it a function name + config, it queries the graph for callers/callees, reads source code, calls the LLM, and outputs structured decisions.
+
+Highly configurable via a template system (JSON files with inheritance):
+
+```bash
+npm run analyze -- --list-templates                           # see available templates
+npm run analyze -- --function createOrder --file store/orderStore.js --repo my-repo
+npm run analyze -- --repo my-repo --template deep-analysis    # full scan with a specific template
+npm run analyze -- --repo my-repo --continue                  # resume interrupted scan
+```
+
+Configuration dimensions: context depth (caller/callee hops), code granularity (full/truncated/signature), output control (finding types, max decisions, language), prompt templates, AI provider.
+
+### MCP Server — 9 tools
+
+| Tool | What it does |
+|------|-------------|
+| `get_context_for_code` | Five-slot retrieval — the main entry point |
+| `search_decisions_by_keyword` | Keyword search with inverted index |
+| `search_decisions_semantic` | Vector similarity search |
+| `get_decision_relationships` | Explore causal/dependency/conflict chains |
+| `get_code_structure` | List functions in a file/service |
+| `get_callers` / `get_callees` | Upstream/downstream dependencies |
+| `get_cross_repo_dependencies` | Cross-service API dependencies |
+| `report_context_usage` | Feedback: which decisions were actually useful |
+
+### Dashboard
+
+Web UI for browsing decisions, visualizing coverage gaps, managing pipelines, and configuring repos. Supports EN/ZH.
 
 ```bash
 npm run dashboard    # http://localhost:3001
 ```
 
-| Page | Description |
-|------|-------------|
-| **Overview** | Stats, repo coverage, keyword cloud, recent decisions |
-| **Decisions** | Browse + search + filter decisions by type/repo |
-| **Relationships** | Decision relationship graph visualization |
-| **Coverage** | File/function-level decision coverage |
-| **Dependencies** | Cross-repo dependency force graph |
-| **Feedback** | Usage log — which decisions are being used |
-| **Sessions** | Ingest decisions from AI coding sessions |
-| **Templates** | Visual editor for analyze_function configs |
-| **Pipeline** | Prompt template editor for cold-start pipeline |
-| **Run / Schedule** | One-click pipeline execution + cron scheduling |
-| **Quick Scan** | Select a repo, get decisions instantly — no goal needed |
-| **Getting Started** | Step-by-step onboarding with live status checks |
-| **Query** | Execute raw Cypher queries |
-| **System** | Memgraph status, repo config, AI provider, setup actions |
+### Refinement pipeline
 
----
-
-## Refinement Pipeline
+Runs overnight to keep the graph accurate:
 
 ```bash
-npm run refine                          # all 5 tasks
-npm run refine -- --only staleness      # single task
-npm run refine -- --budget 200000       # with token budget
+npm run refine                       # all tasks
+npm run refine -- --only staleness   # single task
 ```
 
-5 tasks:
-
-1. **Staleness detection** — compare against git HEAD, mark changed decisions as stale
-2. **Anchor precision upgrade** — APPROXIMATE_TO to ANCHORED_TO (when summary contains function name)
-3. **Keyword normalization** — LLM merges synonyms into canonical forms
-4. **Decision edge completion** — analyze same-file decision pairs for CAUSED_BY / DEPENDS_ON / CONFLICTS_WITH
-5. **Gap detection** — find high-call-count functions with zero decision coverage
+Tasks: staleness detection (compare against git HEAD), anchor precision upgrade, keyword normalization, decision edge completion, gap detection (high-complexity functions with zero coverage).
 
 ---
 
-## Data Model
+## Configuration
 
-### Node Types
+`ckg.config.json` in project root (see `ckg.config.example.json`):
+
+```json
+{
+  "project": "my-project",
+  "ai": { "provider": "claude-cli" },
+  "repos": [
+    {
+      "name": "my-service",
+      "path": "/absolute/path/to/repo",
+      "type": "backend",
+      "cpgFile": "data/my-service.json"
+    }
+  ]
+}
+```
+
+AI providers: `claude-cli` (subscription, no cost) or `anthropic-api` (direct API, set key in config or Dashboard).
+
+---
+
+## Data model
+
+### Node types
 
 ```
 CodeEntity        — Code structure: service / file / function / api_endpoint
@@ -278,7 +187,7 @@ DecisionContext   — Design decision: why, tradeoffs, rejected alternatives
 AggregatedSummary — Aggregated summary (generated by refinement)
 ```
 
-### Edge Types
+### Edge types
 
 ```
 # Code structure (from Joern / LLM)
@@ -302,22 +211,21 @@ SUPERSEDES        — new decision replaces old decision
 
 ---
 
-## Tech Stack
+## Tech stack
 
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| Graph DB | Memgraph | Code structure + decision nodes + relationships |
-| Visualization | Memgraph Lab | Graph browser (`localhost:3000`) |
-| Code Analysis | Joern | CPG generation (function calls, data flow) |
-| Decision Extraction | Claude CLI / Anthropic API | Core AI calls |
-| Embedding | Voyage AI | Semantic vector search (optional) |
-| MCP Server | TypeScript + `@modelcontextprotocol/sdk` | 9 query/feedback tools |
-| Dashboard | Hono + vanilla HTML/JS | Management UI (15 pages) |
-| Container | Docker Compose | Memgraph + Lab |
+| Component | Technology |
+|-----------|-----------|
+| Graph DB | Memgraph |
+| Code analysis | Joern (CPG) |
+| Decision extraction | Claude CLI / Anthropic API |
+| Embedding | Voyage AI (optional) |
+| MCP Server | TypeScript + `@modelcontextprotocol/sdk` |
+| Dashboard | Hono + vanilla HTML/JS |
+| Container | Docker Compose |
 
 ---
 
-## All Commands
+## All commands
 
 ```bash
 # Infrastructure
@@ -330,7 +238,6 @@ npm run analyze -- --list-templates                     # List templates
 npm run analyze -- --function X --file Y --repo Z       # Single function
 npm run analyze -- --repo Z                             # Full scan
 npm run analyze -- --repo Z --continue                  # Resume from checkpoint
-npm run analyze -- --repo Z --force --cleanup           # Force re-analyze + cleanup
 
 # Code structure
 npm run ingest:cpg -- --file X     # Import CPG
@@ -342,17 +249,9 @@ npm run link:tables                # Table access relationships
 npm run cold-start:v2 -- --goal X  # Cold-start 4-round pipeline
 npm run ingest:sessions:v2         # Session ingestion
 
-# Decision relationships
-npm run connect                    # Normalize keywords + process PENDING edges
-npm run connect -- --budget 200000 # With token budget
-
 # Refinement
 npm run refine                     # All 5 refinement tasks
 npm run embed:decisions            # Generate embeddings
-
-# Cleanup
-npm run cleanup                    # Delete pipeline session files
-npm run cleanup -- --dry-run       # Preview only
 
 # Services
 npm run mcp                        # MCP Server
@@ -361,71 +260,9 @@ npm run dashboard                  # Dashboard (localhost:3001)
 
 ---
 
-## Project Structure
-
-```
-context-chain/
-├── docker-compose.yml
-├── ckg.config.json                 # Project config (repos, AI provider)
-├── ckg.config.example.json         # Example config template
-├── templates/                      # analyze_function templates
-│   ├── _default.json
-│   ├── quick-scan.json
-│   └── deep-analysis.json
-├── src/
-│   ├── core/                       # Core building blocks
-│   │   ├── analyze-function.ts     # Single function analysis
-│   │   ├── template-loader.ts      # Template loading/inheritance
-│   │   └── types.ts
-│   ├── runners/                    # CLI runners
-│   │   ├── analyze.ts              # Single function + full scan
-│   │   ├── connect.ts              # Keyword normalization + relationship connection
-│   │   └── cleanup-sessions.ts
-│   ├── ai/                         # AI provider abstraction
-│   │   ├── claude-cli.ts           # Claude CLI implementation
-│   │   ├── anthropic-api.ts        # Anthropic API implementation
-│   │   ├── embeddings.ts           # Voyage AI embedding
-│   │   └── budget.ts               # Token budget management
-│   ├── mcp/
-│   │   └── server.ts               # MCP Server (9 tools)
-│   ├── ingestion/                  # Data ingestion pipelines
-│   │   ├── cold-start-v2.ts        # 4-round pipeline
-│   │   ├── quick-scan.ts           # Zero-config scan (filesystem-based)
-│   │   ├── ingest-sessions-v2.ts   # Session ingestion
-│   │   ├── refine.ts               # Refinement (5 tasks)
-│   │   ├── ingest-cpg.ts           # CPG -> Memgraph
-│   │   ├── link-repos.ts           # Cross-repo call linking
-│   │   └── ...
-│   ├── db/                         # Memgraph connection/schema
-│   └── dashboard/                  # Dashboard UI + API
-│       ├── server.ts               # Hono API server
-│       ├── public/shared.css       # Shared styles
-│       ├── public/sidebar.js       # Sidebar + i18n
-│       └── public/*.html           # 15 page files
-├── data/                           # Runtime data (gitignored)
-├── scripts/                        # Setup and utility scripts
-└── joern/                          # Joern CPG extraction scripts
-```
-
----
-
 ## Status
 
-Working:
-- analyze_function core module + template system
-- Full-scan runner (pause/resume, dedup, budget, progress estimation)
-- MCP Server (9 tools, five-slot retrieval + progressive disclosure + feedback loop)
-- Refinement pipeline (5 tasks)
-- Dashboard (15 pages, including template editor, Quick Scan, onboarding)
-- Semantic vector search module (Voyage AI + local vector store)
-- Session ingestion v2 (3-stage pipeline)
-- Code structure layer (Joern CPG + SQL parsing + cross-repo/service/table linking)
-- Pipeline session cleanup
-
-Not yet tested in production:
-- Semantic vector search (code complete, needs Voyage API key + embed:decisions run)
-- Refinement pipeline (code complete, not yet run)
-- Decision relationship edges (code complete, needs refine or cold-start Round 4)
+Core pipeline (analyze_function + full-scan runner + MCP Server + Dashboard + session ingestion + Joern CPG + cross-repo linking) is production-tested on a multi-repo TypeScript project. Semantic vector search and refinement pipeline are code-complete.
 
 ---
 

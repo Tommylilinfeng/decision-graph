@@ -4,7 +4,7 @@
  * Factory: create AIProvider from config.
  */
 
-export { AIProvider, AIProviderOptions, AIConfig, TokenUsage, RateLimitInfo } from './types'
+export { AIProvider, AIProviderOptions, AIConfig, TokenUsage, RateLimitInfo, UnifiedRateLimitInfo } from './types'
 export { ClaudeCLIProvider } from './claude-cli'
 export { AnthropicAPIProvider } from './anthropic-api'
 

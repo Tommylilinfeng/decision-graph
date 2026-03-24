@@ -69,6 +69,14 @@ export interface AnalyzeFunctionConfig {
   model?: string
   /** 超时时间 */
   timeout_ms: number
+
+  // ── Advanced Mode ──
+  /** Enable multi-round agentic analysis */
+  advanced_mode: boolean
+  /** Max rounds in the agentic loop */
+  advanced_max_rounds: number
+  /** Which context modules to enable */
+  advanced_modules: AdvancedContextModules
 }
 
 // ── 模板文件格式 ────────────────────────────────────────
@@ -143,6 +151,7 @@ export interface AnalyzeFunctionResult {
     callee_count: number
     token_usage?: { input_tokens: number; output_tokens: number }
     duration_ms: number
+    advanced?: { mode: string; rounds: AdvancedRoundLog[]; totalRounds: number }
   }
 }
 
@@ -180,4 +189,41 @@ export interface FunctionContext {
   fileContext?: string[]
   /** Business context */
   businessContext?: { summary: string; content: string }[]
+}
+
+// ── Advanced Mode ────────────────────────────────────────
+
+/** Which context modules the user wants the LLM to have access to */
+export interface AdvancedContextModules {
+  callerCode: boolean
+  calleeCode: boolean
+  twoHopNames: boolean
+  existingDecisions: boolean
+  businessContext: boolean
+  fileContext: boolean
+  tableAccess: boolean
+}
+
+/** A request the LLM makes for more context */
+export interface ContextRequest {
+  type: 'function_code' | 'file_overview' | 'existing_decisions'
+  target: string
+  filePath?: string
+  reason?: string
+}
+
+/** What the LLM returns each round in advanced mode */
+export interface AdvancedRoundOutput {
+  decisions: ExtractedDecision[]
+  requests: ContextRequest[]
+  reasoning?: string
+}
+
+/** Tracks one round of the agentic loop */
+export interface AdvancedRoundLog {
+  round: number
+  decisionsExtracted: number
+  requestsFulfilled: number
+  requestsDenied: number
+  durationMs: number
 }

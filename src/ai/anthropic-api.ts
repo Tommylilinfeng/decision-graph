@@ -7,7 +7,7 @@
  * 不依赖 @anthropic-ai/sdk，直接用 fetch 调 API，减少依赖。
  */
 
-import { AIProvider, AIProviderOptions, AIConfig, TokenUsage, RateLimitInfo } from './types'
+import { AIProvider, AIProviderOptions, AIConfig, TokenUsage, RateLimitInfo, UnifiedRateLimitInfo } from './types'
 
 const DEFAULT_MODEL = 'claude-sonnet-4-20250514'
 const DEFAULT_MAX_TOKENS = 4096
@@ -18,6 +18,7 @@ export class AnthropicAPIProvider implements AIProvider {
   lastUsage: TokenUsage = { input_tokens: 0, output_tokens: 0 }
   totalUsage: TokenUsage = { input_tokens: 0, output_tokens: 0 }
   rateLimit?: RateLimitInfo
+  unifiedRateLimit?: UnifiedRateLimitInfo
 
   private apiKey: string
   private model: string
@@ -69,6 +70,26 @@ export class AnthropicAPIProvider implements AIProvider {
         requestsLimit: parseInt(response.headers.get('anthropic-ratelimit-requests-limit') ?? '0'),
         requestsRemaining: parseInt(response.headers.get('anthropic-ratelimit-requests-remaining') ?? '0'),
         resetAt: response.headers.get('anthropic-ratelimit-tokens-reset') ?? '',
+      }
+
+      // 解析 unified rate limit headers (CLI-style usage tracking)
+      const sessionUtil = response.headers.get('anthropic-ratelimit-unified-5h-utilization')
+      const sessionReset = response.headers.get('anthropic-ratelimit-unified-5h-reset')
+      const weeklyUtil = response.headers.get('anthropic-ratelimit-unified-7d-utilization')
+      const weeklyReset = response.headers.get('anthropic-ratelimit-unified-7d-reset')
+      const unifiedStatus = response.headers.get('anthropic-ratelimit-unified-status')
+
+      if (sessionUtil || weeklyUtil) {
+        this.unifiedRateLimit = {
+          session_utilization: parseFloat(sessionUtil ?? '0'),
+          session_reset: sessionReset ? new Date(sessionReset).getTime() : 0,
+          weekly_utilization: parseFloat(weeklyUtil ?? '0'),
+          weekly_reset: weeklyReset ? new Date(weeklyReset).getTime() : 0,
+          status: unifiedStatus ?? 'unknown',
+          updatedAt: Date.now(),
+        }
+        // Emit structured line for parent process to parse
+        console.log(`__RATELIMIT__${JSON.stringify(this.unifiedRateLimit)}`)
       }
 
       const data = await response.json() as {

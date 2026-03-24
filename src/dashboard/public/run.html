@@ -42,6 +42,32 @@
   /* ── Right: Output ── */
   .output-area { display:flex; flex-direction:column; min-height:0; overflow:hidden; }
 
+  /* Tab bar */
+  .tab-bar { display:flex; border-bottom:1px solid var(--border); flex-shrink:0; background:var(--surface-0); }
+  .tab-btn { flex:1; padding:10px 0; text-align:center; font-size:12px; font-weight:600; color:var(--text-dim); cursor:pointer; border:none; background:none; border-bottom:2px solid transparent; transition:all 0.15s; }
+  .tab-btn:hover { color:var(--text); background:var(--surface-1); }
+  .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .tab-panel { display:none; flex:1; flex-direction:column; min-height:0; overflow:hidden; }
+  .tab-panel.active { display:flex; }
+
+  /* Browse panel */
+  .browse-toolbar { padding:12px 20px; border-bottom:1px solid var(--border-subtle); display:flex; gap:10px; align-items:center; flex-shrink:0; }
+  .browse-toolbar input { flex:1; background:var(--surface-2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:13px; padding:7px 12px; }
+  .browse-toolbar input:focus { outline:none; border-color:var(--accent); }
+  .browse-toolbar select { background:var(--surface-2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:12px; padding:7px 10px; }
+  .browse-list { flex:1; overflow-y:auto; }
+  .browse-file-header { padding:8px 20px; font-size:11px; font-weight:700; color:var(--text-dim); background:var(--surface-1); border-bottom:1px solid var(--border-subtle); position:sticky; top:0; z-index:1; }
+  .browse-fn { display:flex; align-items:center; gap:10px; padding:8px 20px; border-bottom:1px solid var(--border-subtle); font-size:13px; }
+  .browse-fn:hover { background:var(--surface-1); }
+  .browse-fn .fn-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .browse-fn .fn-name { font-family:var(--mono); font-weight:500; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .browse-fn .fn-dec { font-family:var(--mono); font-size:11px; color:var(--green); min-width:20px; text-align:right; }
+  .browse-fn .fn-action { font-size:11px; padding:3px 10px; border:1px solid var(--accent); background:transparent; color:var(--accent); border-radius:4px; cursor:pointer; white-space:nowrap; }
+  .browse-fn .fn-action:hover { background:var(--accent); color:var(--bg); }
+  .browse-fn .fn-action:disabled { opacity:0.5; cursor:default; }
+  .browse-fn .fn-action.done { border-color:var(--green); color:var(--green); }
+  .browse-fn .fn-action.error { border-color:var(--red); color:var(--red); }
+
   /* Progress header */
   .progress-header {
     padding:16px 20px; border-bottom:1px solid var(--border);
@@ -143,6 +169,34 @@
 
       <hr class="divider">
 
+      <!-- Analysis Mode -->
+      <div>
+        <div class="section-title">Analysis Mode</div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+          <input type="checkbox" id="advancedMode"> Advanced (multi-round)
+        </label>
+        <div class="hint">LLM can request additional context across multiple rounds.</div>
+      </div>
+
+      <div id="contextModules" style="display:none">
+        <div class="section-title" style="margin-top:8px">Context Modules</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px">
+          <label style="cursor:pointer"><input type="checkbox" id="mod-callerCode" checked> Caller code</label>
+          <label style="cursor:pointer"><input type="checkbox" id="mod-calleeCode" checked> Callee code</label>
+          <label style="cursor:pointer"><input type="checkbox" id="mod-twoHopNames" checked> 2-hop function names</label>
+          <label style="cursor:pointer"><input type="checkbox" id="mod-existingDecisions" checked> Existing decisions</label>
+          <label style="cursor:pointer"><input type="checkbox" id="mod-businessContext" checked> Business context</label>
+          <label style="cursor:pointer"><input type="checkbox" id="mod-fileContext"> File context</label>
+          <label style="cursor:pointer"><input type="checkbox" id="mod-tableAccess"> Table access</label>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+          <span style="font-size:11px;color:var(--text-dim)">Max rounds:</span>
+          <input type="number" id="maxRounds" value="3" min="1" max="5" style="width:50px;text-align:center;font-family:var(--mono);font-size:12px">
+        </div>
+      </div>
+
+      <hr class="divider">
+
       <!-- Actions -->
       <button class="btn-primary" id="startBtn">
         <span>▶</span> Start Analysis
@@ -162,44 +216,69 @@
 
     <!-- ── Right: Output ── -->
     <div class="output-area">
-      <!-- Progress -->
-      <div class="progress-header" id="progressHeader">
-        <div class="progress-stats">
-          <div class="progress-stat">
-            <div class="value blue" id="analyzedCount">0</div>
-            <div class="label">Analyzed</div>
-          </div>
-          <div class="progress-stat">
-            <div class="value green" id="decisionsCount">0</div>
-            <div class="label">Decisions</div>
-          </div>
-          <div class="progress-stat">
-            <div class="value" id="totalCount" style="color:var(--text-dim)">0</div>
-            <div class="label">Total functions</div>
-          </div>
-          <div class="progress-stat">
-            <div class="value" id="skippedCount" style="color:var(--text-dim)">0</div>
-            <div class="label">Skipped</div>
-          </div>
-        </div>
-        <div class="progress-bar-wrap">
-          <div class="progress-bar" id="progressBar" style="width:0%"></div>
-        </div>
-        <div class="progress-current" id="currentFunction">Select a repo and click Start</div>
+      <!-- Tab bar -->
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('bulk')">Bulk Run</button>
+        <button class="tab-btn" onclick="switchTab('browse')">Browse &amp; Analyze</button>
       </div>
 
-      <!-- Function list -->
-      <div class="fn-list" id="fnList">
-        <div class="empty-state">
-          <div class="icon">🔬</div>
-          <p>Select a repository and click "Start Analysis" to begin analyzing functions one by one.</p>
+      <!-- Tab 1: Bulk Run (existing) -->
+      <div class="tab-panel active" id="tab-bulk">
+        <div class="progress-header" id="progressHeader">
+          <div class="progress-stats">
+            <div class="progress-stat">
+              <div class="value blue" id="analyzedCount">0</div>
+              <div class="label">Analyzed</div>
+            </div>
+            <div class="progress-stat">
+              <div class="value green" id="decisionsCount">0</div>
+              <div class="label">Decisions</div>
+            </div>
+            <div class="progress-stat">
+              <div class="value" id="totalCount" style="color:var(--text-dim)">0</div>
+              <div class="label">Total functions</div>
+            </div>
+            <div class="progress-stat">
+              <div class="value" id="skippedCount" style="color:var(--text-dim)">0</div>
+              <div class="label">Skipped</div>
+            </div>
+          </div>
+          <div class="progress-bar-wrap">
+            <div class="progress-bar" id="progressBar" style="width:0%"></div>
+          </div>
+          <div class="progress-current" id="currentFunction">Select a repo and click Start</div>
+        </div>
+
+        <div class="fn-list" id="fnList">
+          <div class="empty-state">
+            <div class="icon">🔬</div>
+            <p>Select a repository and click "Start Analysis" to begin analyzing functions one by one.</p>
+          </div>
+        </div>
+
+        <div class="log-footer">
+          <span id="elapsed">—</span>
+          <span id="tokenCount">—</span>
+          <span id="pendingEdges">—</span>
         </div>
       </div>
 
-      <div class="log-footer">
-        <span id="elapsed">—</span>
-        <span id="tokenCount">—</span>
-        <span id="pendingEdges">—</span>
+      <!-- Tab 2: Browse & Analyze -->
+      <div class="tab-panel" id="tab-browse">
+        <div class="browse-toolbar">
+          <input type="text" id="browseSearch" placeholder="Search functions..." oninput="filterBrowse()">
+          <select id="browseFilter" onchange="filterBrowse()">
+            <option value="">All</option>
+            <option value="unchecked">Unchecked</option>
+            <option value="covered">Covered</option>
+            <option value="reviewed">Reviewed</option>
+          </select>
+        </div>
+        <div class="browse-list" id="browseList">
+          <div class="empty-state">
+            <p>Select a repo on the left, then switch to this tab to browse and analyze individual functions.</p>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -378,6 +457,28 @@
     }
   }
 
+  // ── Advanced mode toggle ──
+  document.getElementById('advancedMode').addEventListener('change', (e) => {
+    document.getElementById('contextModules').style.display = e.target.checked ? 'block' : 'none'
+  })
+
+  function getAdvancedConfig() {
+    if (!document.getElementById('advancedMode').checked) return {}
+    return {
+      advancedMode: true,
+      maxRounds: parseInt(document.getElementById('maxRounds').value) || 3,
+      contextModules: {
+        callerCode: document.getElementById('mod-callerCode').checked,
+        calleeCode: document.getElementById('mod-calleeCode').checked,
+        twoHopNames: document.getElementById('mod-twoHopNames').checked,
+        existingDecisions: document.getElementById('mod-existingDecisions').checked,
+        businessContext: document.getElementById('mod-businessContext').checked,
+        fileContext: document.getElementById('mod-fileContext').checked,
+        tableAccess: document.getElementById('mod-tableAccess').checked,
+      }
+    }
+  }
+
   // ── Start ──
   document.getElementById('startBtn').addEventListener('click', async () => {
     const errEl = document.getElementById('inlineError')
@@ -385,11 +486,13 @@
     const repo = document.getElementById('repoSelect').value
     if (!repo) { errEl.textContent = 'Please select a repository first.'; errEl.style.display = 'block'; return }
 
+    const advCfg = getAdvancedConfig()
     const payload = {
       repo,
       summaryWords: parseInt(document.getElementById('summaryWords').value),
       contentWords: parseInt(document.getElementById('contentWords').value),
       concurrency: parseInt(document.getElementById('concurrencyInput').value) || 2,
+      ...advCfg,
     }
 
     try {
@@ -438,6 +541,111 @@
   }
 
   function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+  // ── Tab switching ──
+  function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach((b, i) => {
+      b.classList.toggle('active', (tab === 'bulk' ? i === 0 : i === 1))
+    })
+    document.getElementById('tab-bulk').classList.toggle('active', tab === 'bulk')
+    document.getElementById('tab-browse').classList.toggle('active', tab === 'browse')
+    if (tab === 'browse' && !browseData) loadBrowseData()
+  }
+
+  // ── Browse & Analyze ──
+  let browseData = null  // { files: [{ path, functions: [{ name, decisions, triageStatus }] }] }
+
+  async function loadBrowseData() {
+    const repo = document.getElementById('repoSelect').value
+    if (!repo) return
+    const list = document.getElementById('browseList')
+    list.innerHTML = '<div class="empty-state"><div class="spinner" style="width:24px;height:24px;border:2px solid var(--surface-3);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;margin:40px auto"></div></div>'
+    try {
+      const res = await fetch(`/api/coverage-tree/${encodeURIComponent(repo)}`)
+      browseData = await res.json()
+      renderBrowse()
+    } catch (e) {
+      list.innerHTML = `<div class="empty-state"><p style="color:var(--red)">${escHtml(e.message)}</p></div>`
+    }
+  }
+
+  function renderBrowse() {
+    if (!browseData) return
+    const search = (document.getElementById('browseSearch').value || '').toLowerCase()
+    const filter = document.getElementById('browseFilter').value
+    const list = document.getElementById('browseList')
+    let html = ''
+
+    for (const file of browseData.files) {
+      const fns = file.functions.filter(fn => {
+        if (search && !fn.name.toLowerCase().includes(search) && !(file.path||'').toLowerCase().includes(search)) return false
+        if (filter === 'unchecked' && (fn.decisions > 0 || fn.triageStatus)) return false
+        if (filter === 'covered' && fn.decisions <= 0) return false
+        if (filter === 'reviewed' && !(fn.decisions === 0 && fn.triageStatus)) return false
+        return true
+      })
+      if (fns.length === 0) continue
+
+      html += `<div class="browse-file-header">${escHtml(file.path || file.name)} (${fns.length})</div>`
+      for (const fn of fns) {
+        const dotColor = fn.decisions > 0 ? '#34d27b' : fn.triageStatus ? '#5c6478' : '#f05656'
+        const decText = fn.decisions > 0 ? fn.decisions : ''
+        html += `<div class="browse-fn">
+          <div class="fn-dot" style="background:${dotColor}"></div>
+          <span class="fn-name">${escHtml(fn.name)}</span>
+          <span class="fn-dec">${decText}</span>
+          <button class="fn-action" onclick="analyzeSingleFn(this,'${escHtml(fn.name)}','${escHtml(file.path||file.name)}')">Analyze</button>
+        </div>`
+      }
+    }
+
+    if (!html) html = '<div class="empty-state"><p>No functions match the filter.</p></div>'
+    list.innerHTML = html
+  }
+
+  function filterBrowse() { renderBrowse() }
+
+  async function analyzeSingleFn(btn, fnName, filePath) {
+    const repo = document.getElementById('repoSelect').value
+    if (!repo) return
+    btn.disabled = true
+    btn.textContent = 'Analyzing...'
+    btn.className = 'fn-action'
+
+    const advCfg = getAdvancedConfig()
+
+    try {
+      const res = await fetch('/api/coverage/analyze-function', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repo, functionName: fnName, filePath, ...advCfg })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed')
+
+      const roundInfo = data.advanced ? ` (${data.advanced.totalRounds}r)` : ''
+      btn.textContent = data.decisions + ' dec' + roundInfo
+      btn.className = 'fn-action done'
+
+      // Update local data
+      if (browseData) {
+        for (const f of browseData.files) {
+          if ((f.path || f.name) === filePath) {
+            const fn = f.functions.find(x => x.name === fnName)
+            if (fn) fn.decisions = data.decisions
+          }
+        }
+      }
+    } catch (e) {
+      btn.textContent = 'Error'
+      btn.className = 'fn-action error'
+      btn.title = e.message
+      setTimeout(() => { btn.textContent = 'Retry'; btn.className = 'fn-action'; btn.disabled = false }, 3000)
+    }
+  }
+
+  // Reload browse data when repo changes
+  document.getElementById('repoSelect').addEventListener('change', () => { browseData = null })
 </script>
 </body>
 </html>

@@ -1,15 +1,18 @@
 #!/bin/bash
 # refresh-all.sh
 #
-# Refresh all repo code structure data:
-#   - bite-me-website: Joern CPG → JSON → Memgraph
-#   - biteme-shared:   Joern CPG → JSON → Memgraph
-#   - biteme-infra:    parse-sql → JSON → Memgraph
-#   - Cross-service connections:      link:repos + link:services + link:tables
+# EXAMPLE SCRIPT for multi-repo setups.
+# This script is specific to the "bite" project and serves as a reference
+# for how to refresh multiple repos. Adapt it to your own project structure.
 #
-# 用法: bash scripts/refresh-all.sh [--skip-joern] [--skip-ingest] [--skip-link]
+# Refresh all repo code structure data:
+#   - Joern CPG → JSON → Memgraph for each repo
+#   - Cross-service connections: link:repos + link:services + link:tables
+#
+# Usage: bash scripts/refresh-all.sh [--skip-joern] [--skip-ingest] [--skip-link]
 #
 # Prerequisites: Joern installed, Memgraph running
+# Set BITE_DIR to override the default sibling directory lookup.
 
 set -e
 

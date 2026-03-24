@@ -123,6 +123,9 @@
     <!-- Left: session list -->
     <div class="session-list-panel">
       <div class="list-toolbar">
+        <select id="filterProject">
+          <option value="">All Projects</option>
+        </select>
         <select id="filterTool">
           <option value="">All Tools</option>
           <option value="claude-code">Claude Code</option>
@@ -165,6 +168,14 @@ async function loadSessions() {
   try {
     const res = await fetch(`${API}/api/sessions`)
     sessions = await res.json()
+
+    // Populate project filter dropdown
+    const projects = [...new Set(sessions.map(s => s.project))].sort()
+    const sel = document.getElementById('filterProject')
+    const cur = sel.value
+    sel.innerHTML = '<option value="">All Projects</option>' +
+      projects.map(p => `<option value="${p}"${p === cur ? ' selected' : ''}>${p}</option>`).join('')
+
     renderList()
   } catch (err) {
     document.getElementById('sessionList').innerHTML = `<div class="detail-empty" style="height:200px;color:var(--red)">Failed to load sessions</div>`
@@ -172,10 +183,12 @@ async function loadSessions() {
 }
 
 function renderList() {
+  const projectFilter = document.getElementById('filterProject').value
   const toolFilter = document.getElementById('filterTool').value
   const statusFilter = document.getElementById('filterStatus').value
 
   let filtered = sessions
+  if (projectFilter) filtered = filtered.filter(s => s.project === projectFilter)
   if (toolFilter) filtered = filtered.filter(s => s.tool === toolFilter)
   if (statusFilter) filtered = filtered.filter(s => s.status === statusFilter)
 
@@ -558,6 +571,7 @@ function escHtml(s) {
 }
 
 // ── Init ────────────────────────────────────────
+document.getElementById('filterProject').addEventListener('change', renderList)
 document.getElementById('filterTool').addEventListener('change', renderList)
 document.getElementById('filterStatus').addEventListener('change', renderList)
 loadSessions()
