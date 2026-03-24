@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CKG — Localize Decisions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<style>
+  .main { display:flex; flex-direction:column; height:100vh; }
+  .content-area { flex:1; display:grid; grid-template-columns:380px 1fr; overflow:hidden; min-height:0; }
+
+  /* ── Left: Controls ── */
+  .controls { border-right:1px solid var(--border); padding:20px; display:flex; flex-direction:column; gap:16px; overflow-y:auto; }
+  .section-title { font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; }
+
+  .stat-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+  .stat-card { background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:12px; text-align:center; }
+  .stat-value { font-family:var(--mono); font-size:24px; font-weight:700; }
+  .stat-value.blue { color:var(--accent); }
+  .stat-value.green { color:var(--green); }
+  .stat-value.yellow { color:var(--yellow); }
+  .stat-value.dim { color:var(--text-dim); }
+  .stat-label { font-size:11px; color:var(--text-dim); margin-top:4px; }
+
+  .config-row { display:flex; align-items:center; gap:10px; }
+  .config-row label { font-size:12px; color:var(--text-dim); min-width:80px; }
+  .config-row select, .config-row input[type="number"] {
+    flex:1; padding:6px 10px; border-radius:6px; border:1px solid var(--border);
+    background:var(--surface-2); color:var(--text); font-family:var(--mono); font-size:13px;
+  }
+  .config-row input[type="checkbox"] { accent-color:var(--accent); }
+
+  .divider { border:none; border-top:1px solid var(--border); margin:2px 0; }
+  .btn-primary { width:100%; }
+  .btn-stop { width:100%; }
+
+  /* ── Right: Output ── */
+  .output-area { display:flex; flex-direction:column; min-height:0; overflow:hidden; }
+
+  .batch-progress { padding:12px 20px; border-bottom:1px solid var(--border); background:var(--surface-0); flex-shrink:0; }
+  .progress-bar-wrap { background:var(--surface-2); border-radius:4px; height:8px; overflow:hidden; margin-top:8px; }
+  .progress-bar { height:100%; background:var(--accent); border-radius:4px; transition:width 0.3s; }
+  .progress-text { display:flex; justify-content:space-between; font-size:12px; font-family:var(--mono); color:var(--text-dim); }
+
+  .log-area { flex:1; overflow-y:auto; padding:16px 20px; font-family:var(--mono); font-size:12px; line-height:1.8; }
+  .log-line { padding:2px 0; }
+  .log-line.info { color:var(--text-secondary); }
+  .log-line.success { color:var(--green); }
+  .log-line.error { color:var(--red); }
+  .log-line.dim { color:var(--text-dim); }
+
+  .empty-state { text-align:center; padding:60px 20px; color:var(--text-dim); }
+  .empty-state .icon { font-size:48px; margin-bottom:16px; opacity:0.3; }
+  .empty-state p { font-size:13px; line-height:1.6; max-width:360px; margin:0 auto; }
+
+  .log-footer { border-top:1px solid var(--border); padding:8px 20px; font-family:var(--mono); font-size:12px; color:var(--text-dim); display:flex; gap:20px; flex-shrink:0; }
+</style>
+</head>
+<body>
+
+<nav class="sidebar" id="sidebar"></nav>
+<script src="/sidebar.js"></script>
+
+<div class="main">
+  <div class="page-header">
+    <h2>Localize Decisions</h2>
+    <div class="status-badge idle" id="statusBadge">IDLE</div>
+  </div>
+
+  <div class="content-area">
+    <!-- ── Left: Controls ── -->
+    <div class="controls">
+
+      <div>
+        <div class="section-title">Translation Status</div>
+        <div style="font-size:11px;color:var(--text-dim);line-height:1.5;margin-bottom:10px">
+          Translates decision <strong style="color:var(--text-secondary)">summary</strong> and <strong style="color:var(--text-secondary)">content</strong> to the target language. Original fields are never modified.
+        </div>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-value dim" id="totalCount">—</div>
+            <div class="stat-label">Total</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value green" id="localizedCount">—</div>
+            <div class="stat-label">Translated</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value yellow" id="pendingCount">—</div>
+            <div class="stat-label">Pending</div>
+          </div>
+        </div>
+        <button class="btn-ghost" style="width:100%;margin-top:8px" id="refreshBtn">↻ Refresh Stats</button>
+      </div>
+
+      <hr class="divider">
+
+      <!-- Config -->
+      <div>
+        <div class="section-title">Configuration</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="config-row">
+            <label>Locale</label>
+            <select id="localeSelect">
+              <option value="zh" selected>Chinese (zh)</option>
+              <option value="ja">Japanese (ja)</option>
+              <option value="ko">Korean (ko)</option>
+              <option value="es">Spanish (es)</option>
+              <option value="fr">French (fr)</option>
+              <option value="de">German (de)</option>
+            </select>
+          </div>
+          <div class="config-row">
+            <label>Batch Size</label>
+            <input type="number" id="batchSizeInput" value="20" min="1" max="50" step="5">
+          </div>
+          <div class="config-row">
+            <label>Force</label>
+            <input type="checkbox" id="forceCheck">
+            <span style="font-size:11px;color:var(--text-dim)">Re-translate all (even already translated)</span>
+          </div>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <!-- Actions -->
+      <button class="btn-primary" id="startBtn">
+        <span>▶</span> Start Translation
+      </button>
+      <button class="btn-stop" id="stopBtn" style="display:none">
+        <span>■</span> Stop After Current Batch
+      </button>
+      <div id="inlineError" style="display:none;font-size:12px;color:var(--red);background:rgba(240,86,86,0.06);border:1px solid rgba(240,86,86,0.15);border-radius:6px;padding:8px 12px;margin-top:8px;line-height:1.5"></div>
+    </div>
+
+    <!-- ── Right: Output ── -->
+    <div class="output-area">
+      <div class="batch-progress" id="progressSection" style="display:none">
+        <div class="progress-text">
+          <span id="progressLabel">0 / 0</span>
+          <span id="progressPct">0%</span>
+        </div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar" id="progressBar" style="width:0%"></div>
+        </div>
+      </div>
+
+      <div class="log-area" id="logArea">
+        <div class="empty-state">
+          <div class="icon">🌐</div>
+          <p>Translate decision summaries and content into your preferred language.</p>
+          <p style="margin-top:12px">Function names, file paths, and technical terms are preserved as-is. Original English text is never modified.</p>
+        </div>
+      </div>
+
+      <div class="log-footer">
+        <span id="translatedCount">0 translated</span>
+        <span id="failedCount">0 failed</span>
+        <span id="elapsed">—</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let eventSource = null
+  let startTime = 0
+  const locale = () => document.getElementById('localeSelect').value
+
+  // ── Stats ──
+  document.getElementById('refreshBtn').addEventListener('click', loadStats)
+  document.getElementById('localeSelect').addEventListener('change', loadStats)
+
+  async function loadStats() {
+    try {
+      const res = await fetch('/api/localize/stats?locale=' + locale())
+      const data = await res.json()
+      if (res.ok) {
+        document.getElementById('totalCount').textContent = data.total.toLocaleString()
+        document.getElementById('localizedCount').textContent = data.localized.toLocaleString()
+        document.getElementById('pendingCount').textContent = data.pending.toLocaleString()
+      }
+    } catch {
+      document.getElementById('totalCount').textContent = '—'
+      document.getElementById('localizedCount').textContent = '—'
+      document.getElementById('pendingCount').textContent = '—'
+    }
+  }
+
+  // ── Status ──
+  function setStatus(status) {
+    const badge = document.getElementById('statusBadge')
+    badge.textContent = status.toUpperCase()
+    badge.className = 'status-badge ' + status
+    document.getElementById('startBtn').style.display = status === 'running' ? 'none' : 'flex'
+    document.getElementById('stopBtn').style.display = status === 'running' ? 'flex' : 'none'
+  }
+
+  function updateElapsed() {
+    if (!startTime) return
+    const sec = Math.floor((Date.now() - startTime) / 1000)
+    const m = Math.floor(sec / 60), s = sec % 60
+    document.getElementById('elapsed').textContent = m > 0 ? `${m}m${s}s` : `${s}s`
+  }
+
+  function addLog(text, cls = 'info') {
+    const area = document.getElementById('logArea')
+    const empty = area.querySelector('.empty-state')
+    if (empty) empty.remove()
+    const line = document.createElement('div')
+    line.className = 'log-line ' + cls
+    line.textContent = text
+    area.appendChild(line)
+    line.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }
+
+  function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+  // ── SSE ──
+  function connectSSE() {
+    if (eventSource) eventSource.close()
+    eventSource = new EventSource('/api/localize/stream')
+
+    eventSource.addEventListener('started', (e) => {
+      try {
+        const d = JSON.parse(e.data)
+        addLog(`Started: locale=${d.locale}, batchSize=${d.batchSize}, force=${d.force}`, 'info')
+      } catch {}
+    })
+
+    eventSource.addEventListener('batch-start', (e) => {
+      try {
+        const d = JSON.parse(e.data)
+        addLog(`Batch #${d.batch + 1}: translating ${d.count} decisions...`, 'dim')
+      } catch {}
+      updateElapsed()
+    })
+
+    eventSource.addEventListener('batch-done', (e) => {
+      try {
+        const d = JSON.parse(e.data)
+        addLog(`Batch #${d.batch + 1}: ${d.translated} translated (total: ${d.totalTranslated})`, 'success')
+      } catch {}
+      updateElapsed()
+    })
+
+    eventSource.addEventListener('batch-error', (e) => {
+      try {
+        const d = JSON.parse(e.data)
+        addLog(`Batch #${d.batch + 1} error: ${d.error}`, 'error')
+      } catch {}
+      updateElapsed()
+    })
+
+    eventSource.addEventListener('progress', (e) => {
+      try {
+        const d = JSON.parse(e.data)
+        const pct = d.total > 0 ? (d.translated / d.total * 100) : 0
+        document.getElementById('progressBar').style.width = pct.toFixed(1) + '%'
+        document.getElementById('progressLabel').textContent = `${d.translated} / ${d.total}`
+        document.getElementById('progressPct').textContent = pct.toFixed(0) + '%'
+        document.getElementById('translatedCount').textContent = d.translated + ' translated'
+      } catch {}
+      updateElapsed()
+    })
+
+    eventSource.addEventListener('done', (e) => {
+      try {
+        const d = JSON.parse(e.data)
+        addLog(`Done! ${d.translated} translated, ${d.failed} failed, ${(d.durationMs / 1000).toFixed(1)}s`, 'success')
+        document.getElementById('failedCount').textContent = d.failed + ' failed'
+      } catch {}
+      setStatus('done')
+      if (eventSource) { eventSource.close(); eventSource = null }
+      loadStats()
+    })
+
+    eventSource.addEventListener('stopped', () => {
+      addLog('Stopped by user.', 'dim')
+      setStatus('idle')
+      if (eventSource) { eventSource.close(); eventSource = null }
+      loadStats()
+    })
+
+    eventSource.addEventListener('error', (e) => {
+      try {
+        const d = JSON.parse(e.data)
+        addLog('Error: ' + d.error, 'error')
+      } catch {}
+      setStatus('error')
+      if (eventSource) { eventSource.close(); eventSource = null }
+    })
+
+    eventSource.addEventListener('status', (e) => {
+      setStatus(e.data === 'done' ? 'done' : e.data === 'error' ? 'error' : 'idle')
+      if (e.data !== 'running') {
+        if (eventSource) { eventSource.close(); eventSource = null }
+      }
+    })
+
+    eventSource.onerror = () => {
+      if (eventSource) { eventSource.close(); eventSource = null }
+    }
+  }
+
+  // ── Start ──
+  document.getElementById('startBtn').addEventListener('click', async () => {
+    const errEl = document.getElementById('inlineError')
+    errEl.style.display = 'none'
+    try {
+      const res = await fetch('/api/localize/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          locale: locale(),
+          batchSize: parseInt(document.getElementById('batchSizeInput').value) || 20,
+          force: document.getElementById('forceCheck').checked,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { errEl.textContent = data.error || 'Failed to start'; errEl.style.display = 'block'; return }
+
+      setStatus('running')
+      startTime = Date.now()
+      document.getElementById('logArea').innerHTML = ''
+      document.getElementById('progressSection').style.display = 'block'
+      document.getElementById('progressBar').style.width = '0%'
+      document.getElementById('progressLabel').textContent = 'Starting...'
+      document.getElementById('progressPct').textContent = '0%'
+      document.getElementById('translatedCount').textContent = '0 translated'
+      document.getElementById('failedCount').textContent = '0 failed'
+      connectSSE()
+    } catch (err) {
+      errEl.textContent = 'Failed to start: ' + err.message; errEl.style.display = 'block'
+    }
+  })
+
+  // ── Stop ──
+  document.getElementById('stopBtn').addEventListener('click', async () => {
+    try { await fetch('/api/localize/stop', { method: 'POST' }) } catch {}
+  })
+
+  // ── Init ──
+  loadStats()
+</script>
+</body>
+</html>

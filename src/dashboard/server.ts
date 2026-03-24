@@ -711,6 +711,9 @@ app.get('/api/decisions', async (c) => {
         id: d.id,
         summary: d.summary,
         content: d.content,
+        summary_zh: d.summary_zh || null,
+        content_zh: d.content_zh || null,
+        localized_at: d.localized_at || null,
         keywords: d.keywords,
         source: d.source,
         confidence: d.confidence,
@@ -2253,6 +2256,201 @@ app.get('/api/group/stream', (c) => {
       await new Promise(resolve => setTimeout(resolve, 200))
     }
   })
+})
+
+// ── Localize Pipeline ────────────────────────────────────
+
+import {
+  localizeDecisions, localizeSingleDecision,
+  fetchDecisionsToLocalize,
+} from '../localization/localize-decisions'
+
+interface LocalizeJob {
+  status: 'idle' | 'running' | 'done' | 'error'
+  locale: string
+  logs: LogBuffer
+  translated: number
+  failed: number
+  total: number
+  startedAt: number
+  abortRequested: boolean
+}
+
+const localizeJob: LocalizeJob = {
+  status: 'idle', locale: 'zh', logs: new LogBuffer(),
+  translated: 0, failed: 0, total: 0,
+  startedAt: 0, abortRequested: false,
+}
+
+app.get('/api/localize/stats', async (c) => {
+  const locale = c.req.query('locale') ?? 'zh'
+  const session = await getSession()
+  try {
+    const totalResult = await session.run(
+      `MATCH (d:DecisionContext)
+       WHERE d.summary IS NOT NULL AND d.source <> 'manual_business_context'
+       RETURN count(d) AS cnt`
+    )
+    const total = num(totalResult.records[0]?.get('cnt'))
+
+    const localizedResult = await session.run(
+      `MATCH (d:DecisionContext)
+       WHERE d.summary_${locale} IS NOT NULL
+       RETURN count(d) AS cnt`
+    )
+    const localized = num(localizedResult.records[0]?.get('cnt'))
+
+    return c.json({ total, localized, pending: total - localized, locale })
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500)
+  } finally {
+    await session.close()
+  }
+})
+
+app.post('/api/localize/start', async (c) => {
+  if (localizeJob.status === 'running') {
+    return c.json({ error: 'Localization already running' }, 409)
+  }
+
+  const body = await c.req.json()
+  const { locale = 'zh', repo, batchSize = 20, force = false } = body
+
+  // Reset job
+  localizeJob.status = 'running'
+  localizeJob.locale = locale
+  localizeJob.logs.clear()
+  localizeJob.translated = 0
+  localizeJob.failed = 0
+  localizeJob.total = 0
+  localizeJob.startedAt = Date.now()
+  localizeJob.abortRequested = false
+
+  // Run in background
+  ;(async () => {
+    const session = await getSession()
+    try {
+      const config = loadConfig()
+      const ai = createAIProvider(config.ai)
+
+      pushLog(localizeJob.logs, JSON.stringify({ type: 'started', locale, repo: repo ?? null, batchSize, force }))
+
+      const result = await localizeDecisions(session, ai, {
+        locale, repo, batchSize, force,
+      }, {
+        onBatchStart: (batch, count) => {
+          pushLog(localizeJob.logs, JSON.stringify({ type: 'batch-start', batch, count }))
+        },
+        onBatchDone: (batch, translated) => {
+          localizeJob.translated += translated
+          pushLog(localizeJob.logs, JSON.stringify({
+            type: 'batch-done', batch, translated,
+            totalTranslated: localizeJob.translated,
+          }))
+        },
+        onBatchError: (batch, error) => {
+          pushLog(localizeJob.logs, JSON.stringify({ type: 'batch-error', batch, error }))
+        },
+        onProgress: (translated, total) => {
+          localizeJob.total = total
+          pushLog(localizeJob.logs, JSON.stringify({
+            type: 'progress', translated, total,
+          }))
+        },
+        shouldAbort: () => localizeJob.abortRequested,
+      })
+
+      cleanupPipelineSessions()
+
+      localizeJob.translated = result.translated
+      localizeJob.failed = result.failed
+      localizeJob.total = result.total
+
+      if (localizeJob.abortRequested) {
+        localizeJob.status = 'idle'
+        pushLog(localizeJob.logs, JSON.stringify({ type: 'stopped', translated: result.translated }))
+      } else {
+        localizeJob.status = 'done'
+        pushLog(localizeJob.logs, JSON.stringify({
+          type: 'done', translated: result.translated, failed: result.failed,
+          total: result.total, durationMs: result.durationMs,
+        }))
+      }
+    } catch (err: any) {
+      localizeJob.status = 'error'
+      pushLog(localizeJob.logs, JSON.stringify({ type: 'error', error: err.message }))
+    } finally {
+      await session.close()
+    }
+  })()
+
+  return c.json({ status: 'started', locale })
+})
+
+app.post('/api/localize/stop', (c) => {
+  if (localizeJob.status === 'running') {
+    localizeJob.abortRequested = true
+    pushLog(localizeJob.logs, JSON.stringify({ type: 'stopping' }))
+  }
+  return c.json({ status: 'stopping' })
+})
+
+app.get('/api/localize/status', (c) => {
+  return c.json({
+    status: localizeJob.status,
+    locale: localizeJob.locale,
+    translated: localizeJob.translated,
+    failed: localizeJob.failed,
+    total: localizeJob.total,
+    startedAt: localizeJob.startedAt,
+  })
+})
+
+app.get('/api/localize/stream', (c) => {
+  return streamSSE(c, async (stream) => {
+    let lastSeq = -1
+    let done = false
+
+    while (!done) {
+      const [entries, newSeq] = localizeJob.logs.readAfter(lastSeq)
+      for (const line of entries) {
+        try {
+          const parsed = JSON.parse(line)
+          await stream.writeSSE({ data: line, event: parsed.type || 'log' })
+        } catch {
+          await stream.writeSSE({ data: line, event: 'log' })
+        }
+      }
+      lastSeq = newSeq
+
+      if (localizeJob.status !== 'running' && localizeJob.logs.readAfter(lastSeq)[0].length === 0) {
+        await stream.writeSSE({ data: localizeJob.status, event: 'status' })
+        done = true
+        break
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 200))
+    }
+  })
+})
+
+// Single decision translation
+app.post('/api/localize/decision/:id', async (c) => {
+  const id = decodeURIComponent(c.req.param('id'))
+  const body = await c.req.json().catch(() => ({}))
+  const locale = (body as any).locale ?? 'zh'
+
+  const session = await getSession()
+  try {
+    const config = loadConfig()
+    const ai = createAIProvider(config.ai)
+    const ok = await localizeSingleDecision(session, ai, id, locale)
+    return ok ? c.json({ status: 'ok' }) : c.json({ error: 'Decision not found' }, 404)
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500)
+  } finally {
+    await session.close()
+  }
 })
 
 // ── Scan Pipeline: goal-based analysis ───────────────────
@@ -3812,6 +4010,12 @@ app.get('/run', (c) => {
 
 app.get('/group', (c) => {
   const htmlPath = path.resolve(__dirname, 'public', 'group.html')
+  const html = fs.readFileSync(htmlPath, 'utf-8')
+  return c.html(html)
+})
+
+app.get('/localize', (c) => {
+  const htmlPath = path.resolve(__dirname, 'public', 'localize.html')
   const html = fs.readFileSync(htmlPath, 'utf-8')
   return c.html(html)
 })

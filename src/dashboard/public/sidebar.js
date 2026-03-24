@@ -29,6 +29,7 @@ var ICONS = {
   scan:          '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2h4M10 2h4M2 14h4M10 14h4M2 2v4M14 2v4M2 14v-4M14 14v-4"/><circle cx="8" cy="8" r="3"/></svg>',
   onboarding:    '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h12M8 2v12"/><circle cx="8" cy="8" r="6.5"/></svg>',
   group:         '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="4" cy="4" r="2"/><circle cx="12" cy="4" r="2"/><circle cx="4" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><path d="M6 4h4M4 6v4M12 6v4M6 12h4"/></svg>',
+  localize:      '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M1.5 8h13M8 1.5c-2 2-3 4-3 6.5s1 4.5 3 6.5M8 1.5c2 2 3 4 3 6.5s-1 4.5-3 6.5"/></svg>',
   search:        '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>',
 }
 
@@ -42,7 +43,7 @@ var I18N = {
     'nav.overview': 'Overview', 'nav.decisions': 'Decisions', 'nav.relationships': 'Relationships',
     'nav.coverage': 'Coverage', 'nav.dependencies': 'Dependencies', 'nav.feedback': 'Feedback',
     'nav.sessions': 'Sessions', 'nav.templates': 'Templates', 'nav.pipeline': 'Pipeline',
-    'nav.run': 'Run', 'nav.group': 'Group', 'nav.schedule': 'Schedule',
+    'nav.run': 'Run', 'nav.group': 'Group', 'nav.localize': 'Localize', 'nav.schedule': 'Schedule',
     'nav.query': 'Query', 'nav.system': 'System',
     'nav.onboarding': 'Getting Started', 'nav.scan': 'Quick Scan',
     'search.placeholder': 'Search...', 'search.inputPlaceholder': 'Search decisions, code, keywords...',
@@ -59,6 +60,7 @@ var I18N = {
     'pipeline.title': 'Pipeline', 'pipeline.subtitle': 'Prompt templates and pipeline configuration',
     'run.title': 'Run', 'run.subtitle': 'Execute analysis pipelines',
     'group.title': 'Group', 'group.subtitle': 'Connect related decisions via batch comparison',
+    'localize.title': 'Localize', 'localize.subtitle': 'Translate decisions to other languages',
     'schedule.title': 'Schedule', 'schedule.subtitle': 'Automated pipeline scheduling',
     'scan.title': 'Quick Scan', 'scan.subtitle': 'Try it now — pick a repo and see design decisions in seconds',
     'query.title': 'Query', 'query.subtitle': 'Execute Cypher queries on the graph',
@@ -71,7 +73,7 @@ var I18N = {
     'nav.overview': '概览', 'nav.decisions': '决策', 'nav.relationships': '关系图',
     'nav.coverage': '覆盖率', 'nav.dependencies': '依赖', 'nav.feedback': '反馈',
     'nav.sessions': 'Sessions', 'nav.templates': '模板', 'nav.pipeline': '管线',
-    'nav.run': '运行', 'nav.group': '分组', 'nav.schedule': '定时',
+    'nav.run': '运行', 'nav.group': '分组', 'nav.localize': '翻译', 'nav.schedule': '定时',
     'nav.onboarding': '快速开始', 'nav.scan': '快速扫描',
     'nav.query': '查询', 'nav.system': '系统',
     'search.placeholder': '搜索...', 'search.inputPlaceholder': '搜索决策、代码、关键词...',
@@ -87,6 +89,7 @@ var I18N = {
     'pipeline.title': '管线配置', 'pipeline.subtitle': 'Prompt 模板与管线参数',
     'run.title': '运行', 'run.subtitle': '执行分析管线',
     'group.title': '分组', 'group.subtitle': '通过批量比较连接相关决策',
+    'localize.title': '翻译', 'localize.subtitle': '将决策翻译成其他语言',
     'schedule.title': '定时任务', 'schedule.subtitle': '自动化管线调度',
     'scan.title': '快速扫描', 'scan.subtitle': '选一个 repo 立刻看到设计决策',
     'onboarding.title': '快速开始', 'onboarding.subtitle': '按步骤设置 Context Chain',
@@ -103,7 +106,7 @@ var PAGE_KEY_MAP = {
   '/overview': 'overview', '/decisions': 'decisions', '/relationships': 'relationships',
   '/coverage': 'coverage', '/dependencies': 'dependencies', '/feedback': 'feedback',
   '/sessions': 'sessions', '/templates': 'templates', '/pipeline': 'pipeline',
-  '/run': 'run', '/group': 'group', '/schedule': 'schedule', '/scan': 'scan',
+  '/run': 'run', '/group': 'group', '/localize': 'localize', '/schedule': 'schedule', '/scan': 'scan',
   '/query': 'query', '/system': 'system', '/onboarding': 'onboarding',
 }
 
@@ -133,6 +136,7 @@ var NAV = [
     { href: '/pipeline',     iconKey: 'pipeline',   key: 'nav.pipeline' },
     { href: '/run',          iconKey: 'run',        key: 'nav.run' },
     { href: '/group',        iconKey: 'group',      key: 'nav.group' },
+    { href: '/localize',     iconKey: 'localize',   key: 'nav.localize' },
     { href: '/schedule',     iconKey: 'schedule',   key: 'nav.schedule' },
   ]},
   { titleKey: 'nav.admin', items: [
