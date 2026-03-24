@@ -59,7 +59,7 @@ export interface AIProvider {
  * ckg.config.json 里 "ai" 段的类型。
  */
 export interface AIConfig {
-  provider: 'claude-cli' | 'anthropic-api'
+  provider: 'claude-cli' | 'anthropic-api' | 'codex-cli'
   model?: string        // e.g. "claude-sonnet-4-20250514"
   apiKey?: string        // anthropic-api 需要，claude-cli 不需要
   maxTokens?: number     // anthropic-api 用，默认 4096
