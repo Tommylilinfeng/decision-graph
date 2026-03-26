@@ -41,7 +41,7 @@ async function main() {
         console.log(`  [batch ${batch + 1}] Translating ${count} decisions...`)
       },
       onBatchDone: (batch, translated) => {
-        console.log(`  [batch ${batch + 1}] Done — ${translated} translated`)
+        console.log(`  [batch ${batch + 1}] Done — ${translated}/${batch + 1} translated`)
       },
       onBatchError: (batch, error) => {
         console.error(`  [batch ${batch + 1}] Error: ${error}`)

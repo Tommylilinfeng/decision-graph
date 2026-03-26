@@ -11,7 +11,8 @@
 @main def extractCodeEntities(
   cpgFile: String,
   outFile: String,
-  repoName: String = "bite-me-website"
+  repoName: String = "bite-me-website",
+  srcDir: String = ""
 ) = {
 
   importCpg(cpgFile)
@@ -54,8 +55,8 @@
 
       // Compute SHA-256 hash of the function body from source file
       val contentHash = try {
-        val f = new java.io.File(m.filename)
-        val absFile = if (f.isAbsolute) f else new java.io.File(System.getProperty("user.dir"), m.filename)
+        val baseDir = if (srcDir.nonEmpty) srcDir else System.getProperty("user.dir")
+        val absFile = new java.io.File(baseDir, cleanPath)
         val src = scala.io.Source.fromFile(absFile, "UTF-8")
         val allLines = try src.getLines().toArray finally src.close()
         val start = math.max(m.lineNumber.getOrElse(1) - 1, 0)

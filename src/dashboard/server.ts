@@ -1410,6 +1410,7 @@ app.post('/api/system/generate-cpg', async (c) => {
         '--param', `cpgFile=${cpgBinPath}`,
         '--param', `outFile=${cpgJsonPath}`,
         '--param', `repoName=${repo}`,
+        '--param', `srcDir=${srcPath}`,
       ],
     },
   ]
@@ -1540,17 +1541,14 @@ app.post('/api/system/staleness-check', async (c) => {
   try {
     const config = loadConfig()
 
-    // 0. Backfill: copy content_hash from CodeEntity to decisions that don't have anchored_content_hash yet
-    await session.run(
-      `MATCH (d:DecisionContext)-[:ANCHORED_TO]->(fn:CodeEntity {entity_type: 'function'})
-       WHERE d.anchored_content_hash IS NULL AND fn.content_hash IS NOT NULL AND fn.content_hash <> ''
-       SET d.anchored_content_hash = fn.content_hash`
-    )
+    // anchored_content_hash is only set at decision creation time — no backfill for old decisions
+    // (we don't have their original baseline, guessing would cause flapping)
 
-    // 1. Get ALL decisions (active + code_changed) with their anchored function + decision's own hash
+    // 1. Get decisions that HAVE anchored_content_hash (active + code_changed)
     const result = await session.run(
       `MATCH (d:DecisionContext)-[:ANCHORED_TO]->(fn:CodeEntity {entity_type: 'function'})
        WHERE d.staleness IN ['active', 'code_changed']
+         AND d.anchored_content_hash IS NOT NULL AND d.anchored_content_hash <> ''
        RETURN d.id AS dId, d.staleness AS currentStaleness,
               d.anchored_content_hash AS anchoredHash,
               fn.id AS fnId, fn.name AS fnName, fn.path AS fnPath,
