@@ -15,7 +15,7 @@
 
 import { Session } from 'neo4j-driver'
 import { AIProvider } from '../ai'
-import { buildKeywordNormalizationPrompt } from '../prompts/cold-start'
+import { buildKeywordNormalizationPrompt } from '../prompts/grouping'
 import { parseJsonSafe } from './shared'
 
 // ── Types ───────────────────────────────────────────────

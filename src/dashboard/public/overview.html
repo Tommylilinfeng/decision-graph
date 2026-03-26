@@ -198,7 +198,7 @@ function render(d) {
     return '<div class="repo-card"><div class="repo-name"><div class="repo-dot" style="background:'+col+'"></div>'+esc(r.name)+'</div><div class="repo-stats">'+entityBadges+'<span class="repo-stat">│</span><span class="repo-stat"><strong>'+fmtN(r.decisions)+'</strong> decisions</span><span class="repo-stat"><strong>'+fmtN(r.calls)+'</strong> CALLS</span></div><div class="cov-bar-wrap"><span class="cov-label">Coverage</span><div class="cov-track"><div class="cov-fill" style="width:'+covPct+'%;background:'+covColor+'"></div></div><span class="cov-pct" style="color:'+covColor+'">'+covPct+'%</span></div><div class="entity-mini">'+miniSegs+'</div></div>'
   }).join('')
 
-  var srcLabel=function(s){return {cold_start:'Scan',cold_start_v2:'Scan',claude_code_session:'Session',manual_business_context:'Business',analyze_function:'Run Analysis'}[s]||s}
+  var srcLabel=function(s){return {claude_code_session:'Session',manual_business_context:'Business',analyze_function:'Run Analysis'}[s]||s}
   var srcData=d.decisionSources.map(function(s,i){return {label:srcLabel(s.source),value:s.count,color:COLORS[i%COLORS.length]}})
   var srcDonut=donutSVG(srcData,140,20)
   var srcLegend=srcData.map(function(s){return '<div class="legend-item"><div class="legend-dot" style="background:'+s.color+'"></div><span class="legend-label">'+esc(s.label)+'</span><span class="legend-val">'+s.value+'</span></div>'}).join('')

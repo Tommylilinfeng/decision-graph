@@ -6,11 +6,15 @@
  */
 
 import fs from 'fs'
+import path from 'path'
+import os from 'os'
 import { exec } from 'child_process'
 import { AIProvider, AIProviderOptions, AIConfig, TokenUsage } from './types'
 
 /** Marker injected into every claude -p prompt so we can identify and clean up pipeline sessions */
 export const CKG_SESSION_MARKER = '[CKG-PIPELINE-SESSION]'
+
+const CLAUDE_PROJECTS_DIR = path.join(os.homedir(), '.claude', 'projects')
 
 export class ClaudeCLIProvider implements AIProvider {
   name = 'claude-cli'
@@ -21,6 +25,34 @@ export class ClaudeCLIProvider implements AIProvider {
 
   constructor(config: AIConfig) {
     this.model = config.model
+  }
+
+  cleanup(): void {
+    if (!fs.existsSync(CLAUDE_PROJECTS_DIR)) return
+    const now = Date.now()
+    const safetyMs = 2 * 60 * 1000
+    try {
+      const dirs = fs.readdirSync(CLAUDE_PROJECTS_DIR, { withFileTypes: true })
+        .filter(e => e.isDirectory() && e.name !== 'memory')
+      for (const dir of dirs) {
+        const dirPath = path.join(CLAUDE_PROJECTS_DIR, dir.name)
+        let files: string[]
+        try { files = fs.readdirSync(dirPath).filter(f => f.endsWith('.jsonl')) } catch { continue }
+        for (const f of files) {
+          const fullPath = path.join(dirPath, f)
+          try {
+            const fd = fs.openSync(fullPath, 'r')
+            const buf = Buffer.alloc(2048)
+            const bytesRead = fs.readSync(fd, buf, 0, 2048, 0)
+            fs.closeSync(fd)
+            if (!buf.slice(0, bytesRead).toString('utf-8').includes(CKG_SESSION_MARKER)) continue
+            const stat = fs.statSync(fullPath)
+            if (now - stat.mtimeMs < safetyMs) continue
+            fs.unlinkSync(fullPath)
+          } catch {}
+        }
+      }
+    } catch {}
   }
 
   call(prompt: string, options?: AIProviderOptions): Promise<string> {

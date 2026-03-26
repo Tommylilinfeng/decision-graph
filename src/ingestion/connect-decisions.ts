@@ -26,7 +26,7 @@ import {
   buildRelationshipPrompt,
   DecisionSummaryForGrouping,
   DecisionFullContent,
-} from '../prompts/cold-start'
+} from '../prompts/grouping'
 import { parseJsonSafe, runWithConcurrency } from './shared'
 
 // ── Types ───────────────────────────────────────────────

@@ -8,7 +8,7 @@
 import fs from 'fs'
 import path from 'path'
 import { Session } from 'neo4j-driver'
-import { BusinessContext, CallerCalleeCode } from '../prompts/cold-start'
+import { BusinessContext, CallerCalleeCode } from '../prompts/grouping'
 
 // ── Types ───────────────────────────────────────────────
 
@@ -345,7 +345,7 @@ export async function batchWriteDecisions(
         await session.run(
           `MATCH (dc:DecisionContext {id: $dcId})
            MATCH (fn:CodeEntity {entity_type: 'function', name: $fnName, repo: $repo})
-           MERGE (dc)-[:ANCHORED_TO]->(fn)`,
+           MERGE (dc)-[:MENTIONS]->(fn)`,
           { dcId: d.id, fnName: relFn, repo: d.repo }
         )
       } catch {}

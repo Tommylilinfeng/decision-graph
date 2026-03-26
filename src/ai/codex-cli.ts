@@ -20,6 +20,8 @@ export class CodexCLIProvider implements AIProvider {
     this.model = config.model
   }
 
+  cleanup(): void { /* no session files to clean */ }
+
   call(prompt: string, options?: AIProviderOptions): Promise<string> {
     const timeoutMs = options?.timeoutMs ?? 120000
 

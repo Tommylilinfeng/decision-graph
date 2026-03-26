@@ -131,11 +131,9 @@ var NAV = [
   { titleKey: 'nav.ingest', items: [
     { href: '/sessions',     iconKey: 'sessions',   key: 'nav.sessions' },
     { href: '/templates',    iconKey: 'templates',  key: 'nav.templates' },
-    { href: '/pipeline',     iconKey: 'pipeline',   key: 'nav.pipeline' },
     { href: '/run',          iconKey: 'run',        key: 'nav.run' },
     { href: '/group',        iconKey: 'group',      key: 'nav.group' },
     { href: '/localize',     iconKey: 'localize',   key: 'nav.localize' },
-    { href: '/schedule',     iconKey: 'schedule',   key: 'nav.schedule' },
   ]},
   { titleKey: 'nav.admin', items: [
     { href: '/onboarding',   iconKey: 'onboarding', key: 'nav.onboarding' },

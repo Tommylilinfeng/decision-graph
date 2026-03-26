@@ -40,7 +40,7 @@ import {
   buildSegmentationPrompt, buildExtractionPrompt,
   SessionSegment,
 } from '../prompts/session'
-import { BusinessContext } from '../prompts/cold-start'
+import { BusinessContext } from '../prompts/grouping'
 import { createPendingEdges } from './connect-decisions'
 import { Session } from 'neo4j-driver'
 

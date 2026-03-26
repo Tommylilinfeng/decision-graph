@@ -6,7 +6,7 @@
  *   Phase 2 — Extraction: deep decision extraction per approved segment
  */
 
-import { BusinessContext } from './cold-start'
+import { BusinessContext } from './grouping'
 import { AnalysisConfig } from '../config'
 
 // ── Types ───────────────────────────────────────────────

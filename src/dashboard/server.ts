@@ -37,9 +37,8 @@ import {
 import {
   buildGroupingPrompt, buildRelationshipPrompt, buildKeywordNormalizationPrompt,
   DecisionSummaryForGrouping, DecisionFullContent, BusinessContext,
-} from '../prompts/cold-start'
+} from '../prompts/grouping'
 import { createAIProvider } from '../ai'
-import { cleanupPipelineSessions } from '../core/session-cleanup'
 import {
   PendingDecision,
   parseJsonSafe, runWithConcurrency,
@@ -258,8 +257,8 @@ app.get('/api/overview', async (c) => {
         embeddedDecisions: embeddedCnt,
         relationshipEdges: relEdgeCnt,
         gapFunctions: gapFnCnt,
-        lastPipelineRun: fullPipeline.startedAt > 0 ? { at: fullPipeline.startedAt, status: fullPipeline.status } : null,
-        lastScheduledRun: schedule.history.length > 0 ? schedule.history[schedule.history.length - 1] : null,
+        lastPipelineRun: null,
+        lastScheduledRun: null,
       },
       entityTypes: entityTypes.records.map(r => ({ type: r.get('type'), count: num(r.get('count')) })),
       edgeTypes: edgeTypes.records.map(r => ({ type: r.get('type'), count: num(r.get('count')) })),
@@ -686,8 +685,7 @@ app.post('/api/coverage/analyze-function', async (c) => {
       saveRunState(state)
     }
 
-    // Auto-cleanup pipeline sessions
-    cleanupPipelineSessions()
+
 
     return c.json({
       status: 'done',
@@ -765,6 +763,74 @@ app.get('/api/decisions', async (c) => {
     return c.json(decisions)
   } catch (err: any) {
     console.error('GET /api/decisions error:', err.message)
+    return c.json({ error: err.message }, 500)
+  } finally {
+    await session.close()
+  }
+})
+
+// ── API: Decision Export ─────────────────────────────────
+
+app.get('/api/decisions/export', async (c) => {
+  const types = c.req.query('types') // comma-separated: decision,bug,suboptimal
+  const repo = c.req.query('repo')
+  const format = c.req.query('format') ?? 'json'
+
+  const session = await getSession()
+  try {
+    const typeFilter = types
+      ? `WHERE d.finding_type IN [${types.split(',').map(t => `'${t.trim()}'`).join(',')}]`
+      : ''
+    const repoFilter = repo
+      ? (typeFilter ? ` AND ANY(s IN d.scope WHERE s = '${repo}')` : ` WHERE ANY(s IN d.scope WHERE s = '${repo}')`)
+      : ''
+
+    const result = await session.run(
+      `MATCH (d:DecisionContext) ${typeFilter}${repoFilter}
+       OPTIONAL MATCH (d)-[:ANCHORED_TO]->(ce:CodeEntity)
+       RETURN d, collect(DISTINCT {name: ce.name, path: ce.path, type: ce.entity_type}) AS anchors
+       ORDER BY d.created_at DESC`
+    )
+
+    const decisions = result.records.map(r => {
+      const d = r.get('d').properties
+      const anchors = r.get('anchors').filter((a: any) => a.name)
+      return {
+        id: d.id,
+        summary: d.summary,
+        content: d.content,
+        finding_type: d.finding_type || 'decision',
+        keywords: d.keywords || [],
+        source: d.source,
+        staleness: d.staleness || 'active',
+        owner: d.owner,
+        scope: d.scope || [],
+        created_at: d.created_at,
+        anchors: anchors.map((a: any) => ({ name: a.name, path: a.path, type: a.type })),
+        ...(d.critique ? { critique: d.critique } : {}),
+        ...(d.summary_zh ? { summary_zh: d.summary_zh } : {}),
+        ...(d.content_zh ? { content_zh: d.content_zh } : {}),
+      }
+    })
+
+    if (format === 'csv') {
+      const header = 'id,finding_type,summary,content,keywords,anchors,source,staleness,created_at'
+      const escape = (s: string) => `"${String(s || '').replace(/"/g, '""')}"`
+      const rows = decisions.map(d =>
+        [d.id, d.finding_type, escape(d.summary), escape(d.content),
+         escape((d.keywords || []).join('; ')), escape(d.anchors.map((a: any) => a.name).join('; ')),
+         d.source, d.staleness, d.created_at].join(',')
+      )
+      const csv = [header, ...rows].join('\n')
+      return new Response(csv, {
+        headers: { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename="decisions.csv"' },
+      })
+    }
+
+    return new Response(JSON.stringify(decisions, null, 2), {
+      headers: { 'Content-Type': 'application/json', 'Content-Disposition': 'attachment; filename="decisions.json"' },
+    })
+  } catch (err: any) {
     return c.json({ error: err.message }, 500)
   } finally {
     await session.close()
@@ -1451,86 +1517,9 @@ app.get('/api/system/cpg/status', (c) => {
   return c.json({ status: cpgJob.status, repo: cpgJob.repo, logCount: cpgJob.logs.length })
 })
 
-// ── Pipeline Configuration API ──────────────────────────
+// ── AI Configuration API ────────────────────────────────
 
-import { listPipelines, loadPipeline, getTemplate, getDefaultTemplates, savePromptOverride, deletePromptOverride, loadPromptOverrides } from '../prompts/prompt-config'
 import { AIConfig } from '../ai/types'
-
-// List all available pipelines
-app.get('/api/pipelines', (c) => {
-  const pipelines = listPipelines()
-  return c.json(pipelines.map(p => {
-    const overrides = loadPromptOverrides(p.id)
-    return {
-      id: p.id,
-      name: p.name,
-      description: p.description,
-      status: p.status ?? 'active',
-      roundCount: p.rounds.length,
-      customCount: Object.keys(overrides).length,
-    }
-  }))
-})
-
-// Get rounds for a specific pipeline
-app.get('/api/pipeline/:pipelineId/rounds', (c) => {
-  const pipelineId = c.req.param('pipelineId')
-  const pipeline = loadPipeline(pipelineId)
-  if (!pipeline) return c.json({ error: 'Pipeline not found' }, 404)
-
-  const overrides = loadPromptOverrides(pipelineId)
-  return c.json(pipeline.rounds.map(r => ({
-    ...r,
-    isCustom: !!overrides[r.id],
-  })))
-})
-
-// Get prompt template for a round
-app.get('/api/pipeline/:pipelineId/prompt/:roundId', (c) => {
-  const pipelineId = c.req.param('pipelineId')
-  const roundId = c.req.param('roundId')
-  const pipeline = loadPipeline(pipelineId)
-  if (!pipeline) return c.json({ error: 'Pipeline not found' }, 404)
-
-  const round = pipeline.rounds.find(r => r.id === roundId)
-  if (!round) return c.json({ error: 'Round not found' }, 404)
-
-  const { template, isCustom } = getTemplate(pipelineId, roundId)
-  const defaults = getDefaultTemplates(pipelineId)
-  return c.json({
-    roundId,
-    template,
-    isCustom,
-    defaultTemplate: defaults[roundId] ?? '',
-    variables: round.variables,
-  })
-})
-
-// Save prompt override
-app.put('/api/pipeline/:pipelineId/prompt/:roundId', async (c) => {
-  const pipelineId = c.req.param('pipelineId')
-  const roundId = c.req.param('roundId')
-  const pipeline = loadPipeline(pipelineId)
-  if (!pipeline) return c.json({ error: 'Pipeline not found' }, 404)
-
-  const round = pipeline.rounds.find(r => r.id === roundId)
-  if (!round) return c.json({ error: 'Round not found' }, 404)
-
-  const body = await c.req.json()
-  const { template } = body
-  if (typeof template !== 'string') return c.json({ error: 'template is required' }, 400)
-
-  savePromptOverride(pipelineId, roundId, template)
-  return c.json({ status: 'saved', pipelineId, roundId })
-})
-
-// Reset prompt to default
-app.delete('/api/pipeline/:pipelineId/prompt/:roundId', (c) => {
-  const pipelineId = c.req.param('pipelineId')
-  const roundId = c.req.param('roundId')
-  deletePromptOverride(pipelineId, roundId)
-  return c.json({ status: 'reset', pipelineId, roundId })
-})
 
 app.get('/api/pipeline/ai-config', (c) => {
   try {
@@ -1559,162 +1548,6 @@ app.put('/api/pipeline/ai-config', async (c) => {
   }
 })
 
-// ── Quick Scan: zero-config analysis ────────────────────
-
-interface ScanJob {
-  process: ChildProcess | null
-  status: 'idle' | 'running' | 'done' | 'error'
-  repo: string
-  logs: string[]
-  startedAt: number
-}
-
-const scanJob: ScanJob = {
-  process: null,
-  status: 'idle',
-  repo: '',
-  logs: [],
-  startedAt: 0,
-}
-
-app.get('/api/scan/repos', (c) => {
-  try {
-    const config = loadConfig()
-    return c.json(config.repos.map(r => ({ name: r.name, path: r.path, type: r.type })))
-  } catch {
-    return c.json([])
-  }
-})
-
-app.get('/api/scan/preflight', async (c) => {
-  // Check if Memgraph is up and repos have data
-  const result: any = { memgraph: false, repos: [], hasData: false }
-  try {
-    const config = loadConfig()
-    result.repos = config.repos.map(r => ({
-      name: r.name, type: r.type,
-      cpgExists: fs.existsSync(path.resolve(__dirname, '../..', r.cpgFile)),
-    }))
-  } catch {}
-  try {
-    const session = await getSession()
-    try {
-      await session.run('RETURN 1')
-      result.memgraph = true
-      const countResult = await session.run(
-        `MATCH (ce:CodeEntity {entity_type: 'service'}) RETURN count(ce) AS cnt`
-      )
-      result.hasData = (countResult.records[0]?.get('cnt')?.toNumber?.() ?? 0) > 0
-    } finally {
-      await session.close()
-    }
-  } catch {}
-  return c.json(result)
-})
-
-app.get('/api/scan/status', (c) => {
-  return c.json({
-    status: scanJob.status,
-    repo: scanJob.repo,
-    logCount: scanJob.logs.length,
-    startedAt: scanJob.startedAt,
-  })
-})
-
-app.post('/api/scan/start', async (c) => {
-  if (scanJob.status === 'running') {
-    return c.json({ error: 'Scan already running' }, 409)
-  }
-
-  const body = await c.req.json()
-  const { repo, concurrency } = body
-
-  if (!repo) {
-    return c.json({ error: 'repo is required' }, 400)
-  }
-
-  scanJob.status = 'running'
-  scanJob.repo = repo
-  scanJob.logs = []
-  scanJob.startedAt = Date.now()
-
-  // Use scan pipeline with an auto-generated goal
-  const scanArgs = [
-    '--transpile-only',
-    path.resolve(__dirname, '../ingestion/cold-start-v2.ts'),
-    '--goal', 'core business logic, architecture decisions, and important design patterns',
-    '--repo', repo,
-    '--force',
-  ]
-  if (concurrency) scanArgs.push('--concurrency', String(concurrency))
-
-  const tsNode = path.resolve(__dirname, '../../node_modules/.bin/ts-node')
-
-  const child = spawn(tsNode, scanArgs, {
-    cwd: path.resolve(__dirname, '../..'),
-    env: { ...process.env },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-
-  scanJob.process = child
-
-  const addLog = (line: string) => {
-    if (line.trim()) scanJob.logs.push(line)
-  }
-
-  child.stdout?.on('data', (data: Buffer) => {
-    data.toString().split('\n').forEach(addLog)
-  })
-  child.stderr?.on('data', (data: Buffer) => {
-    data.toString().split('\n').forEach(addLog)
-  })
-
-  child.on('close', (code) => {
-    scanJob.status = code === 0 ? 'done' : 'error'
-    addLog(code === 0 ? 'Scan finished' : `Scan exited with code ${code}`)
-    scanJob.process = null
-  })
-
-  child.on('error', (err) => {
-    scanJob.status = 'error'
-    addLog(`Failed to start: ${err.message}`)
-    scanJob.process = null
-  })
-
-  return c.json({ status: 'started', repo })
-})
-
-app.get('/api/scan/stream', (c) => {
-  return streamSSE(c, async (stream) => {
-    let lastIdx = 0
-    let done = false
-
-    while (!done) {
-      while (lastIdx < scanJob.logs.length) {
-        await stream.writeSSE({ data: scanJob.logs[lastIdx], event: 'log' })
-        lastIdx++
-      }
-
-      if (scanJob.status !== 'running' && lastIdx >= scanJob.logs.length) {
-        await stream.writeSSE({ data: scanJob.status, event: 'status' })
-        done = true
-        break
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 300))
-    }
-  })
-})
-
-app.post('/api/scan/stop', (c) => {
-  if (scanJob.process) {
-    scanJob.process.kill('SIGTERM')
-    scanJob.status = 'idle'
-    scanJob.logs.push('Scan stopped by user')
-    scanJob.process = null
-  }
-  return c.json({ status: 'stopped' })
-})
 
 // ══════════════════════════════════════════════════════════
 // ── Run Analysis: in-process function-by-function analysis
@@ -1845,7 +1678,7 @@ async function deleteOldDecisionsForFunction(
     const result = await session.run(
       `MATCH (d:DecisionContext)-[:ANCHORED_TO]->(fn:CodeEntity {entity_type: 'function', name: $fnName})
        MATCH (f:CodeEntity {entity_type: 'file', path: $filePath, repo: $repo})-[:CONTAINS]->(fn)
-       WHERE d.source IN ['analyze_function', 'cold_start_v2', 'cold_start']
+       WHERE d.source IN ['analyze_function']
        DETACH DELETE d
        RETURN count(d) AS cnt`,
       { fnName: functionName, filePath, repo }
@@ -1977,8 +1810,7 @@ async function runAnalysis(repo: string, concurrency: number, advancedConfig?: {
       }))
     })
 
-    // Auto-cleanup pipeline sessions after LLM calls
-    cleanupPipelineSessions()
+
 
     if (runJob.abortRequested) {
       runJob.status = 'idle'
@@ -2236,8 +2068,7 @@ app.post('/api/group/start', async (c) => {
         },
       })
 
-      // Auto-cleanup pipeline sessions after LLM calls
-      cleanupPipelineSessions()
+      ai.cleanup()
 
       if (groupJob.abortRequested) {
         groupJob.status = 'idle'
@@ -2395,7 +2226,7 @@ app.post('/api/localize/start', async (c) => {
         shouldAbort: () => localizeJob.abortRequested,
       })
 
-      cleanupPipelineSessions()
+      ai.cleanup()
 
       localizeJob.translated = result.translated
       localizeJob.failed = result.failed
@@ -2490,24 +2321,6 @@ app.post('/api/localize/decision/:id', async (c) => {
 
 // ── Scan Pipeline: goal-based analysis ───────────────────
 
-interface PipelineJob {
-  process: ChildProcess | null
-  status: 'idle' | 'running' | 'done' | 'error'
-  goal: string
-  repo: string | null
-  logs: string[]
-  startedAt: number
-}
-
-const job: PipelineJob = {
-  process: null,
-  status: 'idle',
-  goal: '',
-  repo: null,
-  logs: [],
-  startedAt: 0,
-}
-
 app.get('/api/scan/config', (c) => {
   try {
     const config = loadConfig()
@@ -2519,700 +2332,6 @@ app.get('/api/scan/config', (c) => {
   } catch {
     return c.json({ repos: [] })
   }
-})
-
-app.get('/api/scan/pipeline/status', (c) => {
-  return c.json({
-    status: job.status,
-    goal: job.goal,
-    repo: job.repo,
-    logCount: job.logs.length,
-    startedAt: job.startedAt,
-  })
-})
-
-app.post('/api/scan/pipeline/start', async (c) => {
-  if (job.status === 'running') {
-    return c.json({ error: 'Pipeline already running' }, 409)
-  }
-
-  const body = await c.req.json()
-  const { goal, repo, owner, concurrency, dryRun } = body
-
-  if (!goal) {
-    return c.json({ error: 'goal is required' }, 400)
-  }
-
-  // Reset job state
-  job.status = 'running'
-  job.goal = goal
-  job.repo = repo || null
-  job.logs = []
-  job.startedAt = Date.now()
-
-  // Build args
-  const args = [
-    '--transpile-only',
-    path.resolve(__dirname, '../ingestion/cold-start-v2.ts'),
-    '--goal', goal,
-  ]
-  if (repo) args.push('--repo', repo)
-  if (owner) args.push('--owner', owner)
-  if (concurrency) args.push('--concurrency', String(concurrency))
-  if (dryRun) args.push('--dry-run')
-  if (body.force) args.push('--force')
-  if (body.deepCheck) args.push('--deep-check')
-
-  const tsNode = path.resolve(__dirname, '../../node_modules/.bin/ts-node')
-
-  const child = spawn(tsNode, args, {
-    cwd: path.resolve(__dirname, '../..'),
-    env: { ...process.env },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-
-  job.process = child
-
-  const addLog = (line: string) => {
-    if (line.trim()) {
-      job.logs.push(line)
-    }
-  }
-
-  child.stdout?.on('data', (data: Buffer) => {
-    data.toString().split('\n').forEach(addLog)
-  })
-  child.stderr?.on('data', (data: Buffer) => {
-    data.toString().split('\n').forEach(addLog)
-  })
-
-  child.on('close', (code) => {
-    job.status = code === 0 ? 'done' : 'error'
-    addLog(code === 0 ? '\n✅ Pipeline finished' : `\n❌ Pipeline exited with code ${code}`)
-    job.process = null
-  })
-
-  child.on('error', (err) => {
-    job.status = 'error'
-    addLog(`❌ Failed to start: ${err.message}`)
-    job.process = null
-  })
-
-  return c.json({ status: 'started', goal, repo })
-})
-
-app.get('/api/scan/pipeline/stream', (c) => {
-  return streamSSE(c, async (stream) => {
-    let lastIdx = 0
-    let done = false
-
-    while (!done) {
-      // Send any new log lines
-      while (lastIdx < job.logs.length) {
-        await stream.writeSSE({ data: job.logs[lastIdx], event: 'log' })
-        lastIdx++
-      }
-
-      // Check if pipeline is done
-      if (job.status !== 'running' && lastIdx >= job.logs.length) {
-        await stream.writeSSE({ data: job.status, event: 'status' })
-        done = true
-        break
-      }
-
-      // Poll interval
-      await new Promise(resolve => setTimeout(resolve, 300))
-    }
-  })
-})
-
-app.post('/api/scan/pipeline/stop', (c) => {
-  if (job.process) {
-    job.process.kill('SIGTERM')
-    job.status = 'idle'
-    job.logs.push('⏹️ Pipeline stopped by user')
-    job.process = null
-  }
-  return c.json({ status: 'stopped' })
-})
-
-app.get('/api/scan/pipeline/logs', (c) => {
-  return c.json({ logs: job.logs, status: job.status })
-})
-
-// ── Schedule: nightly pipeline runs ───────────────────────
-
-type PipelinePhase = 'schema' | 'ingest' | 'link' | 'scan' | 'sessions' | 'refine' | 'embed'
-
-interface PipelineConfig {
-  goals: string[]
-  concurrency: number
-  owner: string
-  repo: string | null
-  force: boolean
-  deepCheck: boolean
-  dryRun: boolean
-  skipPhases: PipelinePhase[]
-  reset: boolean
-  budget?: string
-}
-
-interface ScheduleConfig {
-  deadline: string | null  // "HH:MM" — pipeline must stop by this time
-  usageLimit: number       // 0-100, stop when session utilization reaches this %
-  pipelineConfig: PipelineConfig
-}
-
-interface ScheduleRunRecord {
-  startedAt: number
-  finishedAt: number
-  status: 'done' | 'error' | 'skipped' | 'deadline-stopped' | 'usage-limit'
-  duration: number
-  logCount: number
-  goals: string[]
-}
-
-interface UnifiedUsageState {
-  session_utilization: number
-  session_reset: number
-  weekly_utilization: number
-  weekly_reset: number
-  status: string
-  updatedAt: number
-}
-
-interface ScheduleState {
-  config: ScheduleConfig | null
-  history: ScheduleRunRecord[]
-  usage: UnifiedUsageState | null
-}
-
-const SCHEDULE_FILE = path.resolve(__dirname, '../../data/schedule.json')
-
-function loadScheduleFromDisk(): { config: ScheduleConfig | null; history: ScheduleRunRecord[] } {
-  try {
-    if (fs.existsSync(SCHEDULE_FILE)) {
-      return JSON.parse(fs.readFileSync(SCHEDULE_FILE, 'utf-8'))
-    }
-  } catch {}
-  return { config: null, history: [] }
-}
-
-function saveScheduleToDisk(): void {
-  try {
-    fs.mkdirSync(path.dirname(SCHEDULE_FILE), { recursive: true })
-    const data = { config: schedule.config, history: schedule.history.slice(-50) }
-    fs.writeFileSync(SCHEDULE_FILE, JSON.stringify(data, null, 2))
-  } catch (err: any) {
-    console.error('Failed to save schedule:', err.message)
-  }
-}
-
-const diskData = loadScheduleFromDisk()
-const schedule: ScheduleState = {
-  config: diskData.config,
-  history: diskData.history,
-  usage: null,
-}
-
-/** Convert deadline "HH:MM" to today's timestamp (ms) */
-function deadlineToTimestamp(deadline: string): number {
-  const [h, m] = deadline.split(':').map(Number)
-  const target = new Date()
-  target.setHours(h, m, 0, 0)
-  return target.getTime()
-}
-
-/**
- * Check if pipeline should stop based on session_reset vs deadline.
- * If the current window's reset time is AFTER the deadline,
- * any usage in this window will still be counted when the user starts working.
- */
-function checkDeadlineVsReset(): void {
-  if (!schedule.config?.deadline || !schedule.usage) return
-  if (fullPipeline.status !== 'running' || !fullPipeline.process) return
-
-  const deadlineMs = deadlineToTimestamp(schedule.config.deadline)
-  const resetMs = schedule.usage.session_reset
-
-  if (resetMs > deadlineMs) {
-    const resetStr = new Date(resetMs).toLocaleTimeString()
-    console.log(`⏰ Session reset (${resetStr}) is after deadline (${schedule.config.deadline}) — stopping pipeline`)
-    fullPipeline.process.kill('SIGTERM')
-    fullPipeline.status = 'error'
-    fullPipeline.logs.push(`\n⏰ Pipeline stopped: session window resets at ${resetStr}, after deadline ${schedule.config.deadline}`)
-    fullPipeline.process = null
-
-    schedule.history.push({
-      startedAt: fullPipeline.startedAt,
-      finishedAt: Date.now(),
-      status: 'deadline-stopped',
-      duration: Date.now() - fullPipeline.startedAt,
-      logCount: fullPipeline.logs.length,
-      goals: schedule.config?.pipelineConfig.goals ?? [],
-    })
-    saveScheduleToDisk()
-  }
-}
-
-// ── Pipeline History ──────────────────────────────────────
-
-const HISTORY_FILE = path.resolve(__dirname, '../../data/pipeline-history.jsonl')
-
-interface PipelineHistoryEntry {
-  startedAt: number
-  finishedAt: number
-  status: 'done' | 'error'
-  phases: string[]
-  goals: string[]
-  duration: number
-  logLines: number
-  tokenEstimate: number
-}
-
-function appendPipelineHistory(entry: PipelineHistoryEntry): void {
-  try {
-    fs.mkdirSync(path.dirname(HISTORY_FILE), { recursive: true })
-    fs.appendFileSync(HISTORY_FILE, JSON.stringify(entry) + '\n')
-  } catch (err: any) {
-    console.error('Failed to save pipeline history:', err.message)
-  }
-}
-
-function readPipelineHistory(limit = 50): PipelineHistoryEntry[] {
-  try {
-    if (!fs.existsSync(HISTORY_FILE)) return []
-    return fs.readFileSync(HISTORY_FILE, 'utf-8')
-      .split('\n').filter(Boolean)
-      .map(line => JSON.parse(line))
-      .reverse().slice(0, limit)
-  } catch { return [] }
-}
-
-app.get('/api/pipeline/history', (c) => {
-  const limit = parseInt(c.req.query('limit') ?? '50')
-  return c.json(readPipelineHistory(limit))
-})
-
-// ── Full Pipeline: multi-phase orchestration ─────────────
-
-interface FullPipelineJob {
-  process: ChildProcess | null
-  status: 'idle' | 'running' | 'done' | 'error'
-  phases: PipelinePhase[]
-  currentPhase: PipelinePhase | null
-  currentPhaseIdx: number
-  completedPhases: PipelinePhase[]
-  logs: string[]
-  startedAt: number
-  config: PipelineConfig | null
-}
-
-const fullPipeline: FullPipelineJob = {
-  process: null,
-  status: 'idle',
-  phases: [],
-  currentPhase: null,
-  currentPhaseIdx: -1,
-  completedPhases: [],
-  logs: [],
-  startedAt: 0,
-  config: null,
-}
-
-app.get('/api/full-pipeline/status', (c) => {
-  return c.json({
-    status: fullPipeline.status,
-    phases: fullPipeline.phases,
-    currentPhase: fullPipeline.currentPhase,
-    currentPhaseIdx: fullPipeline.currentPhaseIdx,
-    completedPhases: fullPipeline.completedPhases,
-    logCount: fullPipeline.logs.length,
-    startedAt: fullPipeline.startedAt,
-    config: fullPipeline.config,
-  })
-})
-
-type PipelineStep = { label: string; phase: PipelinePhase; cmd: string; args: string[] }
-
-function startPipelineInternal(cfg: PipelineConfig): { error?: string; phases?: PipelinePhase[]; stepCount?: number } {
-  const { goals, concurrency, owner, repo, force, deepCheck, dryRun, skipPhases, reset } = cfg
-
-  const allPhases: PipelinePhase[] = ['schema', 'ingest', 'link', 'scan', 'sessions', 'refine', 'embed']
-  const phases = allPhases.filter(p => !skipPhases.includes(p))
-
-  if (phases.length === 0) return { error: 'No phases to run — all skipped' }
-
-  fullPipeline.status = 'running'
-  fullPipeline.phases = phases
-  fullPipeline.currentPhase = null
-  fullPipeline.currentPhaseIdx = -1
-  fullPipeline.completedPhases = []
-  fullPipeline.logs = []
-  fullPipeline.startedAt = Date.now()
-  fullPipeline.config = cfg
-
-  const projectRoot = path.resolve(__dirname, '../..')
-  const tsNode = path.resolve(projectRoot, 'node_modules/.bin/ts-node')
-
-  const steps: PipelineStep[] = []
-
-  if (reset) {
-    steps.push({ label: 'Clear database', phase: 'schema', cmd: tsNode, args: ['src/db/reset.ts'] })
-    steps.push({ label: 'Reset database', phase: 'schema', cmd: tsNode, args: ['src/db/schema.ts'] })
-  }
-
-  if (phases.includes('schema') && !reset) {
-    steps.push({ label: 'Initialize schema', phase: 'schema', cmd: tsNode, args: ['src/db/schema.ts'] })
-  }
-
-  if (phases.includes('ingest')) {
-    try {
-      const config = loadConfig()
-      for (const r of config.repos) {
-        const cpgPath = path.resolve(projectRoot, r.cpgFile)
-        if (fs.existsSync(cpgPath)) {
-          steps.push({
-            label: `Ingest CPG: ${r.name}`, phase: 'ingest', cmd: tsNode,
-            args: ['--transpile-only', 'src/ingestion/ingest-cpg.ts', '--file', r.cpgFile],
-          })
-        }
-      }
-    } catch {}
-  }
-
-  if (phases.includes('link')) {
-    steps.push({ label: 'Link repos', phase: 'link', cmd: tsNode, args: ['--transpile-only', 'src/ingestion/link-repos.ts'] })
-    steps.push({ label: 'Link services', phase: 'link', cmd: tsNode, args: ['--transpile-only', 'src/ingestion/link-services.ts'] })
-    steps.push({ label: 'Link tables', phase: 'link', cmd: tsNode, args: ['--transpile-only', 'src/ingestion/link-tables.ts'] })
-  }
-
-  if (phases.includes('scan') && goals.length > 0) {
-    for (const goal of goals) {
-      const csArgs = [
-        '--transpile-only', path.resolve(__dirname, '../ingestion/cold-start-v2.ts'),
-        '--goal', goal, '--owner', owner, '--concurrency', String(concurrency),
-      ]
-      if (repo) csArgs.push('--repo', repo)
-      if (force) csArgs.push('--force')
-      if (deepCheck) csArgs.push('--deep-check')
-      if (dryRun) csArgs.push('--dry-run')
-      steps.push({ label: `Scan: ${goal}`, phase: 'scan', cmd: tsNode, args: csArgs })
-    }
-  }
-
-  if (phases.includes('sessions')) {
-    steps.push({
-      label: 'Ingest sessions', phase: 'sessions', cmd: tsNode,
-      args: ['--transpile-only', 'src/ingestion/ingest-sessions.ts', '--concurrency', String(concurrency), '--owner', owner],
-    })
-  }
-
-  if (phases.includes('refine')) {
-    const refineArgs = ['--transpile-only', 'src/ingestion/refine.ts']
-    if (cfg.budget) refineArgs.push('--budget', cfg.budget)
-    steps.push({ label: 'Refine: staleness + anchors + keywords + edges + gaps', phase: 'refine', cmd: tsNode, args: refineArgs })
-  }
-
-  if (phases.includes('embed')) {
-    steps.push({ label: 'Embed decisions (vector store)', phase: 'embed', cmd: tsNode, args: ['--transpile-only', 'src/ingestion/embed-decisions.ts'] })
-  }
-
-  if (steps.length === 0) {
-    fullPipeline.status = 'idle'
-    return { error: 'No steps to execute' }
-  }
-
-  const addLog = (line: string) => {
-    if (line.trim()) fullPipeline.logs.push(line)
-  }
-
-  const finalizePipeline = (status: 'done' | 'error') => {
-    // Estimate tokens from log content
-    let tokenEst = 0
-    for (const line of fullPipeline.logs) {
-      const m = line.match(/(\d[\d,]*)\s*tokens/i)
-      if (m) tokenEst += parseInt(m[1].replace(/,/g, '')) || 0
-    }
-    appendPipelineHistory({
-      startedAt: fullPipeline.startedAt,
-      finishedAt: Date.now(),
-      status,
-      phases: fullPipeline.phases,
-      goals: cfg.goals,
-      duration: Date.now() - fullPipeline.startedAt,
-      logLines: fullPipeline.logs.length,
-      tokenEstimate: tokenEst,
-    })
-  }
-
-  const runStep = (idx: number) => {
-    if (idx >= steps.length) {
-      fullPipeline.status = 'done'
-      fullPipeline.currentPhase = null
-      addLog('\n\u2705 Full pipeline complete')
-      fullPipeline.process = null
-      finalizePipeline('done')
-      return
-    }
-
-    const step = steps[idx]
-
-    if (step.phase !== fullPipeline.currentPhase) {
-      if (fullPipeline.currentPhase && !fullPipeline.completedPhases.includes(fullPipeline.currentPhase)) {
-        fullPipeline.completedPhases.push(fullPipeline.currentPhase)
-      }
-      fullPipeline.currentPhase = step.phase
-      fullPipeline.currentPhaseIdx = fullPipeline.phases.indexOf(step.phase)
-      addLog(`\n\u2501\u2501 Phase: ${step.phase} \u2501\u2501`)
-    }
-
-    addLog(`  [${idx + 1}/${steps.length}] ${step.label}`)
-
-    const child = spawn(step.cmd, step.args, {
-      cwd: projectRoot,
-      env: { ...process.env },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-
-    fullPipeline.process = child
-
-    child.stdout?.on('data', (data: Buffer) => {
-      data.toString().split('\n').forEach(line => {
-        if (!line.trim()) return
-        // Parse rate limit info from child process
-        if (line.startsWith('__RATELIMIT__')) {
-          try {
-            schedule.usage = JSON.parse(line.slice('__RATELIMIT__'.length))
-            // Check usage limit (% threshold)
-            if (schedule.config?.usageLimit && schedule.usage) {
-              const pct = schedule.usage.session_utilization * 100
-              if (pct >= schedule.config.usageLimit && fullPipeline.status === 'running' && fullPipeline.process) {
-                console.log(`⚠️ Usage limit reached (${Math.round(pct)}% >= ${schedule.config.usageLimit}%) — stopping pipeline`)
-                fullPipeline.process.kill('SIGTERM')
-                fullPipeline.status = 'error'
-                fullPipeline.logs.push(`\n⚠️ Pipeline stopped: usage limit reached (${Math.round(pct)}% >= ${schedule.config.usageLimit}%)`)
-                fullPipeline.process = null
-                schedule.history.push({
-                  startedAt: fullPipeline.startedAt,
-                  finishedAt: Date.now(),
-                  status: 'usage-limit',
-                  duration: Date.now() - fullPipeline.startedAt,
-                  logCount: fullPipeline.logs.length,
-                  goals: schedule.config?.pipelineConfig.goals ?? [],
-                })
-                saveScheduleToDisk()
-                return
-              }
-            }
-            // Check deadline vs session reset
-            checkDeadlineVsReset()
-          } catch {}
-          return
-        }
-        addLog('    ' + line)
-      })
-    })
-    child.stderr?.on('data', (data: Buffer) => {
-      data.toString().split('\n').forEach(line => { if (line.trim()) addLog('    ' + line) })
-    })
-
-    child.on('close', (code) => {
-      if (code === 0) {
-        addLog(`  \u2713 ${step.label} done`)
-        runStep(idx + 1)
-      } else {
-        fullPipeline.status = 'error'
-        addLog(`  \u274c ${step.label} failed (exit ${code})`)
-        if (fullPipeline.currentPhase) fullPipeline.completedPhases.push(fullPipeline.currentPhase)
-        fullPipeline.process = null
-        finalizePipeline('error')
-      }
-    })
-
-    child.on('error', (err) => {
-      fullPipeline.status = 'error'
-      addLog(`  \u274c ${step.label}: ${err.message}`)
-      fullPipeline.process = null
-      finalizePipeline('error')
-    })
-  }
-
-  runStep(0)
-  return { phases, stepCount: steps.length }
-}
-
-app.post('/api/full-pipeline/start', async (c) => {
-  if (fullPipeline.status === 'running') {
-    return c.json({ error: 'Pipeline already running' }, 409)
-  }
-
-  const body = await c.req.json()
-  const cfg: PipelineConfig = {
-    goals: body.goals ?? [],
-    concurrency: body.concurrency ?? 2,
-    owner: body.owner ?? 'me',
-    repo: body.repo ?? null,
-    force: !!body.force,
-    deepCheck: !!body.deepCheck,
-    dryRun: !!body.dryRun,
-    skipPhases: body.skipPhases ?? [],
-    reset: !!body.reset,
-    budget: body.budget || undefined,
-  }
-
-  const result = startPipelineInternal(cfg)
-  if (result.error) {
-    return c.json({ error: result.error }, 400)
-  }
-  return c.json({ status: 'started', phases: result.phases, stepCount: result.stepCount })
-})
-
-app.get('/api/full-pipeline/stream', (c) => {
-  return streamSSE(c, async (stream) => {
-    let lastIdx = 0
-    let done = false
-    while (!done) {
-      while (lastIdx < fullPipeline.logs.length) {
-        await stream.writeSSE({
-          data: JSON.stringify({
-            log: fullPipeline.logs[lastIdx],
-            phase: fullPipeline.currentPhase,
-            phaseIdx: fullPipeline.currentPhaseIdx,
-            completedPhases: fullPipeline.completedPhases,
-          }),
-          event: 'log',
-        })
-        lastIdx++
-      }
-      if (fullPipeline.status !== 'running' && lastIdx >= fullPipeline.logs.length) {
-        await stream.writeSSE({ data: fullPipeline.status, event: 'status' })
-        done = true
-        break
-      }
-      await new Promise(resolve => setTimeout(resolve, 300))
-    }
-  })
-})
-
-app.post('/api/full-pipeline/stop', (c) => {
-  if (fullPipeline.process) {
-    fullPipeline.process.kill('SIGTERM')
-    fullPipeline.status = 'idle'
-    fullPipeline.logs.push('\u23f9\ufe0f Pipeline stopped by user')
-    fullPipeline.process = null
-  }
-  return c.json({ status: 'stopped' })
-})
-
-app.get('/api/full-pipeline/logs', (c) => {
-  return c.json({ logs: fullPipeline.logs, status: fullPipeline.status })
-})
-
-// ── Schedule API ─────────────────────────────────────────
-
-app.get('/api/schedule', (c) => {
-  return c.json({
-    config: schedule.config,
-    history: schedule.history.slice(-20).reverse(),
-    usage: schedule.usage,
-    pipelineStatus: fullPipeline.status,
-    pipelineStartedAt: fullPipeline.startedAt,
-    deadlineActive: false,
-  })
-})
-
-app.post('/api/schedule', async (c) => {
-  const body = await c.req.json()
-  const { deadline } = body
-
-  if (deadline && !/^\d{2}:\d{2}$/.test(deadline)) {
-    return c.json({ error: 'Invalid deadline format, expected HH:MM' }, 400)
-  }
-  if (deadline) {
-    const [h, m] = deadline.split(':').map(Number)
-    if (h < 0 || h > 23 || m < 0 || m > 59) {
-      return c.json({ error: 'Invalid deadline value' }, 400)
-    }
-  }
-
-  const usageLimit = typeof body.usageLimit === 'number' ? Math.max(0, Math.min(100, body.usageLimit)) : undefined
-
-  if (!schedule.config) {
-    schedule.config = {
-      deadline: deadline || null,
-      usageLimit: usageLimit ?? 80,
-      pipelineConfig: { goals: [], concurrency: 2, owner: 'me', repo: null, force: false, deepCheck: false, dryRun: false, skipPhases: [], reset: false },
-    }
-  } else {
-    schedule.config.deadline = deadline || null
-    if (usageLimit !== undefined) schedule.config.usageLimit = usageLimit
-  }
-  saveScheduleToDisk()
-
-  // If pipeline is running, immediately check if we should stop
-  if (fullPipeline.status === 'running' && schedule.usage) {
-    checkDeadlineVsReset()
-  }
-
-  return c.json({ status: 'saved' })
-})
-
-app.post('/api/schedule/run', async (c) => {
-  if (fullPipeline.status === 'running') {
-    return c.json({ error: 'Pipeline already running' }, 409)
-  }
-
-  // Accept pipeline config from request body, or use last saved config from full-pipeline
-  const body = await c.req.json().catch(() => ({}))
-  const cfg: PipelineConfig = {
-    goals: body.goals ?? fullPipeline.config?.goals ?? [],
-    concurrency: body.concurrency ?? fullPipeline.config?.concurrency ?? 2,
-    owner: body.owner ?? fullPipeline.config?.owner ?? 'me',
-    repo: body.repo ?? fullPipeline.config?.repo ?? null,
-    force: body.force ?? fullPipeline.config?.force ?? false,
-    deepCheck: body.deepCheck ?? fullPipeline.config?.deepCheck ?? false,
-    dryRun: body.dryRun ?? fullPipeline.config?.dryRun ?? false,
-    skipPhases: body.skipPhases ?? fullPipeline.config?.skipPhases ?? [],
-    reset: body.reset ?? false,
-  }
-
-  const startTime = Date.now()
-  const result = startPipelineInternal(cfg)
-
-  if (result.error) {
-    return c.json({ error: result.error }, 400)
-  }
-
-  // Deadline check happens reactively in __RATELIMIT__ handler
-
-  const poll = setInterval(() => {
-    if (fullPipeline.status !== 'running') {
-      clearInterval(poll)
-      const lastEntry = schedule.history[schedule.history.length - 1]
-      if (!lastEntry || lastEntry.startedAt !== startTime) {
-        schedule.history.push({
-          startedAt: startTime,
-          finishedAt: Date.now(),
-          status: fullPipeline.status === 'done' ? 'done' : 'error',
-          duration: Date.now() - startTime,
-          logCount: fullPipeline.logs.length,
-          goals: cfg.goals,
-        })
-        saveScheduleToDisk()
-      }
-    }
-  }, 5000)
-
-  return c.json({ status: 'started', phases: result.phases, stepCount: result.stepCount })
-})
-
-app.get('/api/schedule/usage', (c) => {
-  return c.json({ usage: schedule.usage })
-})
-
-app.get('/api/schedule/history', (c) => {
-  return c.json({ history: schedule.history })
 })
 
 // ── Session Ingestion API ────────────────────────────────
@@ -3366,8 +2485,7 @@ app.post('/api/sessions/:id/segment', async (c) => {
       setPhase1Done(state, segments, phase0.estimatedTokens <= TOKEN_BUDGET ? 1 : 0)
       saveSessionState(state)
 
-      // Auto-cleanup pipeline sessions after LLM calls
-      cleanupPipelineSessions()
+      ai.cleanup()
 
       return c.json({ segments: state.phase1!.segments, cached: false })
     } finally {
@@ -3563,8 +2681,7 @@ app.post('/api/sessions/:id/analyze', async (c) => {
         setPhase2Done(state!, totalEdges)
         saveSessionState(state!)
 
-        // Auto-cleanup pipeline sessions after LLM calls
-        cleanupPipelineSessions()
+        ai.cleanup()
 
         log(`Done: ${allDecisions.length} decisions, ${totalEdges} edges`)
         sessionJobs.get(jobId)!.status = 'done'
@@ -3980,15 +3097,6 @@ app.get('/templates', (c) => {
   return c.html(html)
 })
 
-app.get('/pipeline', (c) => {
-  const htmlPath = path.resolve(__dirname, 'public', 'pipeline.html')
-  const html = fs.readFileSync(htmlPath, 'utf-8')
-  return c.html(html)
-})
-
-// cold-start.html removed — redirect to /scan
-app.get('/cold-start', (c) => c.redirect('/scan'))
-
 app.get('/decisions', (c) => {
   const htmlPath = path.resolve(__dirname, 'public', 'decisions.html')
   const html = fs.readFileSync(htmlPath, 'utf-8')
@@ -4031,12 +3139,6 @@ app.get('/onboarding', (c) => {
   return c.html(html)
 })
 
-app.get('/scan', (c) => {
-  const htmlPath = path.resolve(__dirname, 'public', 'scan.html')
-  const html = fs.readFileSync(htmlPath, 'utf-8')
-  return c.html(html)
-})
-
 app.get('/run', (c) => {
   const htmlPath = path.resolve(__dirname, 'public', 'run.html')
   const html = fs.readFileSync(htmlPath, 'utf-8')
@@ -4051,12 +3153,6 @@ app.get('/group', (c) => {
 
 app.get('/localize', (c) => {
   const htmlPath = path.resolve(__dirname, 'public', 'localize.html')
-  const html = fs.readFileSync(htmlPath, 'utf-8')
-  return c.html(html)
-})
-
-app.get('/schedule', (c) => {
-  const htmlPath = path.resolve(__dirname, 'public', 'schedule.html')
   const html = fs.readFileSync(htmlPath, 'utf-8')
   return c.html(html)
 })
@@ -4110,11 +3206,6 @@ async function findAvailablePort(start: number): Promise<number> {
 
 async function main() {
   await verifyConnectivity()
-
-  // Schedule config already loaded at init time
-  if (schedule.config) {
-    console.log(`📅 Schedule loaded: deadline ${schedule.config.deadline ?? 'not set'}`)
-  }
 
   const port = await findAvailablePort(PREFERRED_PORT)
   if (port !== PREFERRED_PORT) {

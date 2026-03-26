@@ -119,55 +119,6 @@ export async function POST(
       }
       await send('cpg', cpgOk > 0 ? 'done' : 'error', `Code structure complete (${cpgOk}/${repos.length} repos)`, 100)
 
-      // ── Step 4: Cold-start ─────────────────
-      // Use scanned src_dirs to find the right directories for each repo
-      await send('coldstart', 'running', 'Cold start: extracting design decisions...')
-      let totalDecisions = 0
-
-      for (let i = 0; i < repos.length; i++) {
-        const repo = repos[i]
-        const srcDirs = JSON.parse(repo.src_dirs) as string[]
-
-        // Determine the best --src path:
-        // If repo has src_dirs, use repo.path (cold-start will scan subdirs)
-        // If repo has a src/ directory, use that
-        // Otherwise use repo.path directly
-        let srcPath = repo.path
-        if (fs.existsSync(path.join(repo.path, 'src'))) {
-          srcPath = path.join(repo.path, 'src')
-        }
-
-        // Build --dirs flag from scanned src_dirs
-        // Extract just the directory names (last segment) for the --dirs filter
-        const dirNames = srcDirs.map(d => d.split('/').pop()).filter(Boolean)
-        const dirsFlag = dirNames.length > 0 ? ` --dirs ${dirNames.join(',')}` : ''
-
-        await send('coldstart', 'running', `[${i + 1}/${repos.length}] ${repo.name}...`, Math.round((i / repos.length) * 100))
-
-        try {
-          const out = await run(
-            `npm run cold-start -- --repo ${repo.name} --src "${srcPath}" --owner ${repo.owner} --concurrency 10${dirsFlag}`,
-            { env: portEnv }
-          )
-          const match = out.match(/(\d+) 条决策/)
-          if (match) totalDecisions += parseInt(match[1])
-          await send('coldstart', 'running', `[${i + 1}/${repos.length}] ${repo.name} — done`, Math.round(((i + 1) / repos.length) * 100))
-        } catch (err: any) {
-          await send('coldstart', 'running', `[${i + 1}/${repos.length}] ${repo.name} — failed: ${err.message.slice(0, 80)}`, Math.round(((i + 1) / repos.length) * 100))
-        }
-      }
-      await send('coldstart', 'done', `Cold start complete: ${totalDecisions} decisions`, 100)
-
-      // ── Step 5: Sessions ───────────────────
-      await send('sessions', 'running', 'Ingesting AI conversation history...')
-      try {
-        const out = await run('npm run ingest:sessions', { env: portEnv })
-        const match = out.match(/(\d+) 条决策/)
-        await send('sessions', 'done', `Session ingestion complete: ${match ? match[1] : 0} decisions`)
-      } catch {
-        await send('sessions', 'skipped', 'No AI conversation history found, skipped')
-      }
-
       // ── Done ───────────────────────────────
       await send('complete', 'done', 'Project initialization complete!')
 

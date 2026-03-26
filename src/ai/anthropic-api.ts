@@ -36,6 +36,8 @@ export class AnthropicAPIProvider implements AIProvider {
     this.maxTokens = config.maxTokens ?? DEFAULT_MAX_TOKENS
   }
 
+  cleanup(): void { /* no session files to clean */ }
+
   async call(prompt: string, options?: AIProviderOptions): Promise<string> {
     const timeoutMs = options?.timeoutMs ?? 120000
 

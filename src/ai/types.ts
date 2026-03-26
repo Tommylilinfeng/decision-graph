@@ -42,6 +42,9 @@ export interface AIProvider {
    */
   call(prompt: string, options?: AIProviderOptions): Promise<string>
 
+  /** Clean up sessions created by this provider (e.g. claude -p session files) */
+  cleanup(): void
+
   /** Token usage from last call */
   lastUsage: TokenUsage
 

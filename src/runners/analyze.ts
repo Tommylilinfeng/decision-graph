@@ -32,7 +32,6 @@ import { analyzeFunction } from '../core/analyze-function'
 import { loadTemplate, listTemplates } from '../core/template-loader'
 import { AnalyzeFunctionConfig, PendingDecisionOutput } from '../core/types'
 import { getFilesFromGraph, batchWriteDecisions, toNum } from '../ingestion/shared'
-import { cleanupPipelineSessions } from '../core/session-cleanup'
 import fs from 'fs'
 import path from 'path'
 
@@ -68,7 +67,6 @@ const forceMode     = hasFlag('--force')
 const dryRun        = hasFlag('--dry-run')
 const concurrency   = parseInt(getArg('--concurrency') ?? '1')
 const budgetLimit   = getArg('--budget') ? parseInt(getArg('--budget')!) : null
-const cleanupMode   = hasFlag('--cleanup')
 
 // Runtime config overrides from CLI
 const cliOverrides: Partial<AnalyzeFunctionConfig> = {}
@@ -196,7 +194,7 @@ async function deleteOldDecisionsForFunction(
     const result = await session.run(
       `MATCH (d:DecisionContext)-[:ANCHORED_TO]->(fn:CodeEntity {entity_type: 'function', name: $fnName})
        MATCH (f:CodeEntity {entity_type: 'file', path: $filePath, repo: $repo})-[:CONTAINS]->(fn)
-       WHERE d.source IN ['analyze_function', 'cold_start_v2', 'cold_start']
+       WHERE d.source IN ['analyze_function']
        DETACH DELETE d
        RETURN count(d) AS cnt`,
       { fnName: functionName, filePath, repo }
@@ -470,20 +468,10 @@ async function fullScan(): Promise<void> {
 // ── Entry point ─────────────────────────────────────────
 
 async function main(): Promise<void> {
-  try {
-    if (functionName) {
-      await analyzeSingle()
-    } else {
-      await fullScan()
-    }
-  } finally {
-    // Cleanup: delete all claude -p sessions that contain our pipeline marker
-    if (cleanupMode) {
-      const { deleted, skipped, totalSizeMB, scanned } = cleanupPipelineSessions()
-      if (deleted > 0 || skipped > 0) {
-        console.log(`\n🧹 Cleanup: ${deleted}/${scanned} session files removed (${totalSizeMB}MB)${skipped > 0 ? `, ${skipped} skipped (too recent)` : ''}`)
-      }
-    }
+  if (functionName) {
+    await analyzeSingle()
+  } else {
+    await fullScan()
   }
 }
 

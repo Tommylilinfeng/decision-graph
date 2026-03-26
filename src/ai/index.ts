@@ -32,3 +32,15 @@ export function createAIProvider(config?: AIConfig): AIProvider {
       throw new Error(`Unknown AI provider: ${(c as any).provider}`)
   }
 }
+
+/**
+ * Run a batch of LLM calls with automatic session cleanup on completion.
+ * All runners (run, group, localize) should use this instead of manual cleanup.
+ */
+export async function withAutoCleanup<T>(provider: AIProvider, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn()
+  } finally {
+    provider.cleanup()
+  }
+}

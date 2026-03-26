@@ -29,8 +29,6 @@
     "link:services": "node_modules/.bin/ts-node --transpile-only src/ingestion/link-services.ts",
     "link:tables": "node_modules/.bin/ts-node --transpile-only src/ingestion/link-tables.ts",
     "parse:sql": "node_modules/.bin/ts-node --transpile-only src/ingestion/parse-sql.ts",
-    "cold-start": "node_modules/.bin/ts-node --transpile-only src/ingestion/cold-start.ts",
-    "cold-start:v2": "node_modules/.bin/ts-node --transpile-only src/ingestion/cold-start-v2.ts",
     "embed:decisions": "node_modules/.bin/ts-node --transpile-only src/ingestion/embed-decisions.ts",
     "analyze": "node_modules/.bin/ts-node --transpile-only src/runners/analyze.ts",
     "cleanup": "node_modules/.bin/ts-node --transpile-only src/runners/cleanup-sessions.ts",

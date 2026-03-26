@@ -17,7 +17,7 @@ import {
   PromptBuilders,
   FileEntry, FunctionTriageEntry, CallerCalleeCode, BusinessContext,
   DecisionSummaryForGrouping, DecisionFullContent,
-} from './cold-start'
+} from './grouping'
 import { AnalysisConfig, getAnalysisConfig } from '../config'
 
 // ── Types ───────────────────────────────────────────────

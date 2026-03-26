@@ -106,6 +106,8 @@
   gap: 5px;
 }
 .filter-chip:hover { color: var(--text-secondary); background: var(--surface-3); }
+.export-opt { display:block; width:100%; text-align:left; padding:8px 12px; font-size:12px; color:var(--text-dim); background:transparent; border:none; border-radius:5px; cursor:pointer; white-space:nowrap; }
+.export-opt:hover { background:var(--surface-3); color:var(--text); }
 .filter-chip.active { color: var(--text); background: var(--surface-3); }
 .filter-chip.active[data-type="all"] { color: var(--accent); }
 .filter-chip.active[data-type="decision"] { color: var(--accent); }
@@ -597,6 +599,20 @@
       <option value="keywords">Most keywords</option>
       <option value="stale">Stale first</option>
     </select>
+
+    <div class="export-group" style="position:relative;">
+      <button class="filter-chip" id="exportBtn" style="gap:4px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        Export
+      </button>
+      <div class="export-menu" id="exportMenu" style="display:none; position:absolute; top:100%; right:0; margin-top:4px; background:var(--surface-2,#1c2029); border:1px solid var(--border,#262c38); border-radius:8px; padding:6px; z-index:10; min-width:160px;">
+        <button class="export-opt" data-types="" data-fmt="json">All (JSON)</button>
+        <button class="export-opt" data-types="decision" data-fmt="json">Decisions (JSON)</button>
+        <button class="export-opt" data-types="bug" data-fmt="json">Bugs (JSON)</button>
+        <button class="export-opt" data-types="suboptimal" data-fmt="json">Suboptimal (JSON)</button>
+        <button class="export-opt" data-types="" data-fmt="csv">All (CSV)</button>
+      </div>
+    </div>
   </div>
 
   <!-- Content -->
@@ -807,7 +823,7 @@ function renderDecisions() {
     const stalenessLabel = d.staleness === 'code_changed' ? 'Code Changed' : d.staleness === 'code_removed' ? 'Code Removed' : 'Stale'
     const stalenessColor = d.staleness === 'code_removed' ? 'var(--red)' : 'var(--yellow)'
     const icon = type === 'bug' ? '' : type === 'suboptimal' ? '' : ''
-    const sourceLabel = {cold_start:'Scan',cold_start_v2:'Scan',claude_code_session:'Session',manual_business_context:'Business',analyze_function:'Run Analysis'}[d.source] || d.source
+    const sourceLabel = {claude_code_session:'Session',manual_business_context:'Business',analyze_function:'Run Analysis'}[d.source] || d.source
 
     // Preview keywords (max 3)
     const kwPreview = (d.keywords || []).slice(0, 3).map(k =>
@@ -972,6 +988,31 @@ document.querySelectorAll('#typeFilter .filter-chip').forEach(chip => {
 function debounce(fn, ms) {
   let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms) }
 }
+
+// ── Export ─────────────────────────────────────────
+const exportBtn = document.getElementById('exportBtn')
+const exportMenu = document.getElementById('exportMenu')
+exportBtn.addEventListener('click', () => {
+  exportMenu.style.display = exportMenu.style.display === 'none' ? 'block' : 'none'
+})
+document.addEventListener('click', (e) => {
+  if (!exportBtn.contains(e.target) && !exportMenu.contains(e.target)) {
+    exportMenu.style.display = 'none'
+  }
+})
+exportMenu.querySelectorAll('.export-opt').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const types = btn.dataset.types
+    const fmt = btn.dataset.fmt
+    const repo = document.getElementById('repoSelect').value
+    const params = new URLSearchParams()
+    if (types) params.set('types', types)
+    if (repo) params.set('repo', repo)
+    params.set('format', fmt)
+    window.open('/api/decisions/export?' + params.toString())
+    exportMenu.style.display = 'none'
+  })
+})
 
 // ── Start ──────────────────────────────────────────
 init()

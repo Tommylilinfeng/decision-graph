@@ -752,6 +752,8 @@ async function analyzeFunctionAdvanced(
     }
   })
 
+  ai.cleanup()
+
   return {
     functionName: input.functionName, filePath: input.filePath, repo: input.repo,
     decisions,
@@ -1013,6 +1015,7 @@ export async function analyzeFunction(
       },
     }
   } finally {
+    ai.cleanup()
     if (ownSession) {
       await session.close()
     }

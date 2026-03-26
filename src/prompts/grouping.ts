@@ -1,5 +1,5 @@
 /**
- * cold-start prompt templates
+ * Grouping, relationship, and keyword normalization prompt templates
  *
  * Three analysis rounds + keyword normalization + grouping/relationships:
  *   Round 1 — Scope Selection: pick relevant files for a goal
