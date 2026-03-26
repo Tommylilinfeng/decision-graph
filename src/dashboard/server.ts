@@ -12,6 +12,7 @@ import { streamSSE } from 'hono/streaming'
 import { getSession, verifyConnectivity } from '../db/client'
 import { loadConfig, clearConfigCache, getAnalysisConfig } from '../config'
 import { spawn, ChildProcess } from 'child_process'
+import { createHash } from 'crypto'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
@@ -259,6 +260,7 @@ app.get('/api/overview', async (c) => {
         gapFunctions: gapFnCnt,
         lastPipelineRun: null,
         lastScheduledRun: null,
+        lastStalenessCheck,
       },
       entityTypes: entityTypes.records.map(r => ({ type: r.get('type'), count: num(r.get('count')) })),
       edgeTypes: edgeTypes.records.map(r => ({ type: r.get('type'), count: num(r.get('count')) })),
@@ -1520,6 +1522,122 @@ app.get('/api/system/cpg/stream', (c) => {
 
 app.get('/api/system/cpg/status', (c) => {
   return c.json({ status: cpgJob.status, repo: cpgJob.repo, logCount: cpgJob.logs.length })
+})
+
+// ── Staleness Check API ──────────────────────────────────
+
+let lastStalenessCheck: {
+  checkedAt: string
+  voidedCount: number
+  totalActive: number
+  percentage: string
+  details: { functionId: string; functionName: string; filePath: string; decisionsAffected: number }[]
+} | null = null
+
+app.post('/api/system/staleness-check', async (c) => {
+  const session = await getSession()
+  try {
+    const config = loadConfig()
+
+    // 1. Get all active decisions with their anchored function info
+    const result = await session.run(
+      `MATCH (d:DecisionContext {staleness: 'active'})-[:ANCHORED_TO]->(fn:CodeEntity {entity_type: 'function'})
+       RETURN fn.id AS fnId, fn.name AS fnName, fn.path AS fnPath,
+              fn.line_start AS ls, fn.line_end AS le, fn.content_hash AS oldHash,
+              fn.repo AS repo, collect(d.id) AS decisionIds`
+    )
+
+    if (result.records.length === 0) {
+      lastStalenessCheck = { checkedAt: new Date().toISOString(), voidedCount: 0, totalActive: 0, percentage: '0', details: [] }
+      return c.json(lastStalenessCheck)
+    }
+
+    // Build repo path map
+    const repoPathMap = new Map<string, string>()
+    for (const repo of config.repos) {
+      repoPathMap.set(repo.name, repo.path)
+    }
+
+    const changedFnIds: string[] = []
+    const details: typeof lastStalenessCheck['details'] = []
+    let totalDecisions = 0
+
+    for (const r of result.records) {
+      const fnId = r.get('fnId') as string
+      const fnName = r.get('fnName') as string
+      const fnPath = r.get('fnPath') as string
+      const ls = r.get('ls')
+      const le = r.get('le')
+      const oldHash = (r.get('oldHash') as string) || ''
+      const repo = r.get('repo') as string
+      const decisionIds = r.get('decisionIds') as string[]
+
+      const lineStart = typeof ls === 'number' ? ls : ls?.toNumber?.() ?? -1
+      const lineEnd = typeof le === 'number' ? le : le?.toNumber?.() ?? -1
+
+      totalDecisions += decisionIds.length
+
+      const repoPath = repoPathMap.get(repo)
+      if (!repoPath || lineStart < 1 || lineEnd < 1) continue
+
+      // Resolve file on disk
+      const candidates = [
+        path.join(repoPath, fnPath),
+        path.join(repoPath, 'src', fnPath),
+        ...(fnPath.startsWith('src/') ? [path.join(repoPath, fnPath.slice(4))] : []),
+      ]
+      const diskPath = candidates.find(p => fs.existsSync(p))
+      if (!diskPath) continue
+
+      // Read function body and compute hash
+      try {
+        const lines = fs.readFileSync(diskPath, 'utf-8').split('\n')
+        const start = Math.max(lineStart - 1, 0)
+        const end = Math.min(lineEnd, lines.length)
+        const body = lines.slice(start, end).join('\n')
+        const newHash = createHash('sha256').update(body, 'utf-8').digest('hex')
+
+        if (oldHash && newHash !== oldHash) {
+          changedFnIds.push(fnId)
+          details.push({ functionId: fnId, functionName: fnName, filePath: fnPath, decisionsAffected: decisionIds.length })
+        }
+      } catch {}
+    }
+
+    // Mark changed decisions in DB
+    let voidedCount = 0
+    if (changedFnIds.length > 0) {
+      const now = new Date().toISOString()
+      const markResult = await session.run(
+        `UNWIND $ids AS fnId
+         MATCH (d:DecisionContext {staleness: 'active'})-[:ANCHORED_TO]->(e:CodeEntity {id: fnId})
+         SET d.staleness = 'code_changed',
+             d.staleness_reason = 'Function content changed since decision was extracted',
+             d.staleness_detected_at = $now
+         RETURN count(DISTINCT d) AS cnt`,
+        { ids: changedFnIds, now }
+      )
+      voidedCount = markResult.records[0]?.get('cnt')?.toNumber?.() ?? markResult.records[0]?.get('cnt') ?? 0
+    }
+
+    lastStalenessCheck = {
+      checkedAt: new Date().toISOString(),
+      voidedCount,
+      totalActive: totalDecisions,
+      percentage: totalDecisions > 0 ? ((voidedCount / totalDecisions) * 100).toFixed(1) : '0',
+      details,
+    }
+
+    return c.json(lastStalenessCheck)
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500)
+  } finally {
+    await session.close()
+  }
+})
+
+app.get('/api/system/staleness-check', (c) => {
+  return c.json(lastStalenessCheck ?? { checkedAt: null, voidedCount: 0, totalActive: 0, percentage: '0', details: [] })
 })
 
 // ── AI Configuration API ────────────────────────────────

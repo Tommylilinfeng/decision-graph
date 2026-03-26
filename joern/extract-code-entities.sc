@@ -54,10 +54,13 @@
 
       // Compute SHA-256 hash of the function body from source file
       val contentHash = try {
-        val lines = os.read.lines(os.Path(m.filename))
+        val f = new java.io.File(m.filename)
+        val absFile = if (f.isAbsolute) f else new java.io.File(System.getProperty("user.dir"), m.filename)
+        val src = scala.io.Source.fromFile(absFile, "UTF-8")
+        val allLines = try src.getLines().toArray finally src.close()
         val start = math.max(m.lineNumber.getOrElse(1) - 1, 0)
-        val end   = math.min(m.lineNumberEnd.getOrElse(lines.length), lines.length)
-        val body  = lines.slice(start, end).mkString("\n")
+        val end   = math.min(m.lineNumberEnd.getOrElse(allLines.length), allLines.length)
+        val body  = allLines.slice(start, end).mkString("\n")
         val digest = java.security.MessageDigest.getInstance("SHA-256")
         digest.digest(body.getBytes("UTF-8")).map("%02x".format(_)).mkString
       } catch {
@@ -99,6 +102,6 @@
     "calls" -> ujson.Arr(calls.toSeq: _*)
   )
 
-  os.write(os.Path(outFile), ujson.write(output, indent = 2))
+  os.write.over(os.Path(outFile), ujson.write(output, indent = 2))
   println(s"✅ 导出完成: ${nodes.length} 个节点, ${calls.length} 条调用关系 -> $outFile")
 }
