@@ -107,7 +107,7 @@ function isTokenLimitError(err: any): boolean {
   const msg = String(err?.message ?? '').toLowerCase()
   return msg.includes('too many tokens') ||
     msg.includes('context length') ||
-    msg.includes('maximum.*tokens') ||
+    /maximum.*tokens/.test(msg) ||
     msg.includes('token limit') ||
     msg.includes('request too large')
 }

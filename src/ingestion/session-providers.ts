@@ -65,6 +65,7 @@ export function saveCache(): void {
 export function updateCacheEntry(sessionId: string, turnCount: number, estimatedTokens: number): void {
   const cache = loadCache()
   cache.sessions[sessionId] = { turnCount, estimatedTokens }
+  saveCache()
 }
 
 // ── Claude Code Provider ────────────────────────────────
@@ -150,8 +151,8 @@ class CodexProvider implements SessionProvider {
         const stat = fs.statSync(filePath)
         if (stat.size < 500) return
 
-        // Codex doesn't organize by project, derive from content or use "codex"
-        const project = projectFilter ?? 'codex-session'
+        // Codex doesn't organize by project, use generic name
+        const project = 'codex-session'
         if (projectFilter && !project.includes(projectFilter)) return
 
         const cached = cache.sessions[sessionId]

@@ -62,7 +62,8 @@ export function toNum(val: any): number {
   if (val === null || val === undefined) return -1
   if (typeof val === 'number') return val
   if (typeof val?.toNumber === 'function') return val.toNumber()
-  return parseInt(String(val)) || -1
+  const n = parseInt(String(val))
+  return isNaN(n) ? -1 : n
 }
 
 export function parseJsonSafe<T>(raw: string, fallback: T): T {

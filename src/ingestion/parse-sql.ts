@@ -15,7 +15,7 @@ import fs from 'fs'
 import path from 'path'
 
 const args = process.argv.slice(2)
-const getArg = (f: string) => { const i = args.indexOf(f); return i !== -1 ? args[i + 1] : null }
+const getArg = (f: string) => { const i = args.indexOf(f); return i !== -1 && i + 1 < args.length ? args[i + 1] : null }
 
 const repo    = getArg('--repo') ?? 'bite-me-website'
 const sqlDir  = getArg('--sql-dir')

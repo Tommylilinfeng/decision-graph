@@ -1431,7 +1431,12 @@ app.post('/api/system/generate-cpg', async (c) => {
           cpgJob.process = null
           return
         }
-      } catch {}
+      } catch (err: any) {
+        cpgJob.status = 'error'
+        addLog(`❌ Failed to validate CPG output: ${err?.message ?? 'unknown error'}`)
+        cpgJob.process = null
+        return
+      }
 
       cpgJob.status = 'done'
       addLog('\n✅ CPG generation complete')
