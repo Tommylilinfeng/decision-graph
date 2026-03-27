@@ -20,7 +20,7 @@ export async function getSession(): Promise<Session> {
 
 export async function verifyConnectivity(): Promise<void> {
   await driver.verifyConnectivity()
-  console.log(`✅ Memgraph 连接成功 (${uri})`)
+  process.stderr.write(`✅ Memgraph 连接成功 (${uri})\n`)
 }
 
 export async function closeDriver(): Promise<void> {

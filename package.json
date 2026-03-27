@@ -12,8 +12,12 @@
   "files": [
     "bin/",
     "dist/mcp/",
-    "dist/db/client.js",
-    "dist/db/client.d.ts"
+    "dist/db/",
+    "dist/ai/",
+    "dist/config.js",
+    "dist/config.d.ts",
+    "dist/ingestion/feedback.js",
+    "dist/ingestion/feedback.d.ts"
   ],
   "scripts": {
     "setup": "bash scripts/setup.sh",

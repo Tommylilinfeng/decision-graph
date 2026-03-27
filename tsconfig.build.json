@@ -5,5 +5,5 @@
     "sourceMap": false,
     "skipLibCheck": true
   },
-  "include": ["src/mcp/**/*", "src/db/client.ts"]
+  "include": ["src/mcp/**/*", "src/db/client.ts", "src/ai/**/*", "src/config.ts", "src/ingestion/feedback.ts"]
 }

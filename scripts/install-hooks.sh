@@ -35,15 +35,14 @@ install_to_project() {
     else
       echo "  ⚠️ .mcp.json 已存在但没有 ckg 配置"
       echo "  请手动添加以下内容到 mcpServers 中:"
-      echo "    \"ckg\": { \"command\": \"node_modules/.bin/ts-node\", \"args\": [\"--transpile-only\", \"$CKG_DIR/src/mcp/server.ts\"], \"cwd\": \"$CKG_DIR\" }"
+      echo "    \"ckg\": { \"command\": \"$CKG_DIR/mcp-start.sh\", \"cwd\": \"$CKG_DIR\" }"
     fi
   else
     cat > "$MCP_FILE" << MCPEOF
 {
   "mcpServers": {
     "ckg": {
-      "command": "node_modules/.bin/ts-node",
-      "args": ["--transpile-only", "$CKG_DIR/src/mcp/server.ts"],
+      "command": "$CKG_DIR/mcp-start.sh",
       "cwd": "$CKG_DIR",
       "env": {
         "CKG_MEMGRAPH_HOST": "localhost"

@@ -17,6 +17,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { getSession, verifyConnectivity, closeDriver } from '../db/client'
+import neo4j from 'neo4j-driver'
 import { EmbeddingProvider, createEmbeddingProvider, EmbeddingConfig } from '../ai/embeddings'
 import { LocalVectorStore } from '../ai/vector-store'
 
@@ -116,7 +117,7 @@ server.tool(
         `MATCH (caller:CodeEntity {entity_type: 'function'})-[:CALLS]->(callee:CodeEntity {name: $fn_name})
          RETURN caller.name AS caller_name, caller.path AS caller_path, caller.line_start AS line_start
          ORDER BY caller.path LIMIT $limit`,
-        { fn_name: function_name, limit }
+        { fn_name: function_name, limit: neo4j.int(limit) }
       )
 
       if (result.records.length === 0) {
@@ -158,7 +159,7 @@ server.tool(
         `MATCH (caller:CodeEntity {name: $fn_name, entity_type: 'function'})-[:CALLS]->(callee:CodeEntity)
          RETURN callee.name AS callee_name, callee.path AS callee_path, callee.entity_type AS callee_type
          ORDER BY callee.path LIMIT $limit`,
-        { fn_name: function_name, limit }
+        { fn_name: function_name, limit: neo4j.int(limit) }
       )
 
       if (result.records.length === 0) {
@@ -208,7 +209,7 @@ server.tool(
                 collect(DISTINCT ce.name) AS anchors
          ORDER BY d.created_at DESC
          LIMIT $limit`,
-        { kw: keyword, limit }
+        { kw: keyword, limit: neo4j.int(limit) }
       )
 
       const kwIds = new Set(kwResult.records.map(r => r.get('id')))
@@ -229,7 +230,7 @@ server.tool(
                     collect(DISTINCT ce.name) AS anchors, score
              ORDER BY score DESC
              LIMIT $remaining`,
-            { kw: keyword, existing: [...kwIds], remaining }
+            { kw: keyword, existing: [...kwIds], remaining: neo4j.int(remaining) }
           )
           textRecords = textResult.records
         } catch {
