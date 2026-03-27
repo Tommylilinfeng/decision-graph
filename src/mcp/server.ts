@@ -578,7 +578,7 @@ server.tool(
   },
   async ({ query, depth = 2 }) => {
     const session = await getSession()
-    const maxDepth = Math.min(depth, 3)
+    const maxDepth = Math.max(1, Math.min(Math.floor(depth), 3))
     try {
       // 1. 找到目标决策
       let targetResult
@@ -801,6 +801,12 @@ async function main() {
   await server.connect(transport)
   process.stderr.write('✅ CKG MCP Server 已启动\n')
 }
+
+function shutdown() {
+  closeDriver().finally(() => process.exit(0))
+}
+process.on('SIGINT', shutdown)
+process.on('SIGTERM', shutdown)
 
 main().catch(err => {
   process.stderr.write(`MCP Server 启动失败: ${err.message}\n`)
