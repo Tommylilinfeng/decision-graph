@@ -331,6 +331,13 @@ export async function batchWriteDecisions(
 
     if (fnResult.records.length > 0) {
       anchored++
+      // 同时建立文件级 APPROXIMATE_TO，确保按文件名查询也能命中
+      await session.run(
+        `MATCH (dc:DecisionContext {id: $dcId})
+         MATCH (f:CodeEntity {entity_type: 'file', path: $filePath, repo: $repo})
+         MERGE (dc)-[:APPROXIMATE_TO]->(f)`,
+        { dcId: d.id, filePath: d.filePath, repo: d.repo }
+      ).catch(() => {})
     } else {
       const fileResult = await session.run(
         `MATCH (dc:DecisionContext {id: $dcId})
