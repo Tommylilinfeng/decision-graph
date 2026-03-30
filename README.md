@@ -244,7 +244,7 @@ npm run link:services              # Cross-service dependencies
 npm run link:tables                # Table access relationships
 
 # Pipelines
-npm run cold-start:v2 -- --goal X  # Cold-start 4-round pipeline
+npm run analyze -- --repo X        # Full-scan function analysis
 npm run ingest:sessions:v2         # Session ingestion
 
 # Refinement

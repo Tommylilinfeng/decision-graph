@@ -8,7 +8,7 @@
  *   templates.json  — default templates ({{placeholder}} text)
  *   overrides.json  — user-edited template overrides from Dashboard
  *
- * cold-start-v2.ts calls createCustomPromptBuilders('cold-start') for pluggable prompt builders.
+ * Pipelines call createCustomPromptBuilders(pipelineId) for pluggable prompt builders.
  */
 
 import fs from 'fs'
@@ -126,7 +126,7 @@ export function getTemplate(pipelineId: string, roundId: string): { template: st
   return { template: defaults[roundId] ?? '', isCustom: false }
 }
 
-// ── Variable Preparation (cold-start specific) ──────────
+// ── Variable Preparation ─────────────────────────────────
 
 function prepareScopeVars(goal: string, files: FileEntry[]): Record<string, string> {
   const fileList = files.map((f, i) => {
@@ -239,7 +239,7 @@ function renderTemplate(template: string, vars: Record<string, string>): string 
  * Create PromptBuilders using the template system.
  * pipelineId specifies which pipeline to load templates from.
  */
-export function createCustomPromptBuilders(pipelineId: string = 'cold-start'): PromptBuilders {
+export function createCustomPromptBuilders(pipelineId: string = 'session-ingestion'): PromptBuilders {
   const overrides = loadPromptOverrides(pipelineId)
   const defaults = loadTemplates(pipelineId)
   const t = (roundId: string) => overrides[roundId] ?? defaults[roundId] ?? ''

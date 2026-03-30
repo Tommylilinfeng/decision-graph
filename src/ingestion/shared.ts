@@ -2,7 +2,6 @@
  * ingestion/shared.ts
  *
  * Shared utility functions used by multiple pipelines.
- * Extracted from cold-start-v2.ts, zero logic change.
  */
 
 import fs from 'fs'

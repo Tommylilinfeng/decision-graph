@@ -12,7 +12,6 @@ const navItems = [
   { href: '/pipeline', icon: '⚡', label: 'Pipeline' },
   { href: '/query', icon: '🔍', label: 'Query' },
   { href: '/system', icon: '⚙', label: 'System' },
-  { href: '/cold-start', icon: '🧊', label: 'Cold Start' },
 ];
 
 const fileToRoute = {
@@ -23,7 +22,6 @@ const fileToRoute = {
   'pipeline.html': '/pipeline',
   'query.html': '/query',
   'system.html': '/system',
-  'cold-start.html': '/cold-start',
   'index.html': '/overview',
 };
 

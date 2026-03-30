@@ -7,7 +7,6 @@
 # 用法:
 #   bash scripts/overnight.sh                          # Default budget
 #   bash scripts/overnight.sh --budget 500000          # Absolute budget
-#   GOALS="订单流程|支付系统" bash scripts/overnight.sh  # Analysis goals
 #
 # crontab 示例（Run daily at 1 AM）:
 #   0 1 * * * cd /path/to/context-chain && bash scripts/overnight.sh >> data/logs/overnight.log 2>&1
@@ -20,9 +19,7 @@ cd "$CKG_DIR"
 
 # ── 参数 ──────────────────────────────────────────────
 BUDGET="${1:-500000}"            # 默认 50 万 token
-GOALS="${GOALS:-core business logic}"
 CONCURRENCY="${CONCURRENCY:-2}"
-OWNER="${OWNER:-overnight}"
 LOG_DIR="data/logs"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
@@ -32,7 +29,6 @@ LOG_FILE="$LOG_DIR/overnight-$TIMESTAMP.log"
 echo "============================================" | tee "$LOG_FILE"
 echo "🌙 Context Chain Nightly Pipeline — $(date)" | tee -a "$LOG_FILE"
 echo "  Budget: $BUDGET tokens" | tee -a "$LOG_FILE"
-echo "  Goals: $GOALS" | tee -a "$LOG_FILE"
 echo "  Concurrency: $CONCURRENCY" | tee -a "$LOG_FILE"
 echo "  Log: $LOG_FILE" | tee -a "$LOG_FILE"
 echo "============================================" | tee -a "$LOG_FILE"
@@ -42,26 +38,16 @@ echo "" | tee -a "$LOG_FILE"
 echo "📊 Phase 1: Check quota" | tee -a "$LOG_FILE"
 npx ts-node --transpile-only scripts/check-quota.ts 2>&1 | tee -a "$LOG_FILE" || true
 
-# ── Phase 2: Cold-start 分析 ──────────────────────────
-# 按 | 分割多个Goals，每个目标分配 budget 的一份
-IFS='|' read -ra GOAL_LIST <<< "$GOALS"
-GOAL_COUNT=${#GOAL_LIST[@]}
-PER_GOAL_BUDGET=$((BUDGET * 60 / 100 / GOAL_COUNT))  # 60% 给 cold-start
+# ── Phase 2: Full-scan 分析 ──────────────────────────
+ANALYZE_BUDGET=$((BUDGET * 60 / 100))  # 60% 给 full-scan
 
 echo "" | tee -a "$LOG_FILE"
-echo "🧊 Phase 2: Cold-start ($GOAL_COUNT 个Goals, 每个 $PER_GOAL_BUDGET tokens)" | tee -a "$LOG_FILE"
-
-for goal in "${GOAL_LIST[@]}"; do
-  goal=$(echo "$goal" | xargs)  # trim whitespace
-  echo "" | tee -a "$LOG_FILE"
-  echo "  → Goals: $goal" | tee -a "$LOG_FILE"
-  npx ts-node --transpile-only src/ingestion/cold-start-v2.ts \
-    --goal "$goal" \
-    --owner "$OWNER" \
-    --concurrency "$CONCURRENCY" \
-    --budget "$PER_GOAL_BUDGET" \
-    2>&1 | tee -a "$LOG_FILE" || true
-done
+echo "🔬 Phase 2: Full-scan analyze (budget: $ANALYZE_BUDGET tokens)" | tee -a "$LOG_FILE"
+npx ts-node --transpile-only src/runners/analyze.ts \
+  --continue \
+  --concurrency "$CONCURRENCY" \
+  --budget "$ANALYZE_BUDGET" \
+  2>&1 | tee -a "$LOG_FILE" || true
 
 # ── Phase 3: Refine管线 ────────────────────────────────
 REFINE_BUDGET=$((BUDGET * 20 / 100))  # 20% 给Refine

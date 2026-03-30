@@ -3,7 +3,7 @@
  *
  * 核心 building block：分析单个函数，提取设计决策。
  *
- * 这是整个系统最重要的模块。所有的 pipeline（cold-start、full-scan、
+ * 这是整个系统最重要的模块。所有的 pipeline（full-scan、
  * session ingestion）最终都通过这个模块来生成 DecisionContext。
  *
  * 用法：

@@ -4,7 +4,7 @@
  * 从 Memgraph 查询文件的调用关系，作为辅助上下文喂给 LLM。
  * 这是可选的——查不到不影响任何流程，只是 prompt 少一些背景。
  *
- * 所有摄入管线（cold-start、git-ai、手动录入等）都可以引用这个模块。
+ * 所有摄入管线（full-scan、session ingestion、手动录入等）都可以引用这个模块。
  */
 
 import { getSession } from './client'

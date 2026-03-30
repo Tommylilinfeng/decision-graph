@@ -75,7 +75,7 @@ async function main() {
     console.log('\n📊 Claude CLI (Max subscription)')
     console.log('  Claude CLI 走订阅额度，无法通过 API 查询剩余量')
     console.log('  建议：用 --budget 设置绝对 token 上限控制管线消耗')
-    console.log('  例如: npm run cold-start:v2 -- --goal "..." --budget 500000')
+    console.log('  例如: npm run analyze -- --repo X --budget 500000')
   }
 
   // Voyage embedding 信息
