@@ -87,7 +87,18 @@ function loadProcessed(): Record<string, SessionState> {
 
 function saveProcessed(processed: Record<string, SessionState>): void {
   fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true })
-  fs.writeFileSync(STATE_FILE, JSON.stringify({ processed }, null, 2))
+  // Atomic write: write to temp file then rename to avoid race conditions
+  // when multiple sessions run concurrently
+  const tmpFile = STATE_FILE + `.tmp.${process.pid}`
+  fs.writeFileSync(tmpFile, JSON.stringify({ processed }, null, 2))
+  fs.renameSync(tmpFile, STATE_FILE)
+}
+
+/** Re-load state from disk before writing to avoid clobbering concurrent updates */
+function saveSessionState(sessionId: string, state: SessionState): void {
+  const latest = loadProcessed()
+  latest[sessionId] = state
+  saveProcessed(latest)
 }
 
 // ── Project name from directory ─────────────────────────
@@ -190,7 +201,8 @@ async function runChunkedPhase1(
             prevSummary = segments[segments.length - 1].summary
           }
         } catch (err: any) {
-          console.log(`    ⚠️  Chunk ${c + 1} failed: ${err.message}`)
+          console.log(`    ⚠️  Chunk ${c + 1}/${chunks.length} failed: ${err.message}`)
+          console.log(`        Turns ${chunk.startIdx}-${chunk.endIdx} will NOT be segmented — decisions in this range may be missed`)
         }
       }
 
@@ -480,15 +492,14 @@ async function main(): Promise<void> {
 
       if (segments.length === 0) {
         console.log(`    ○ No meaningful segments found`)
-        processed[phase0.sessionId] = {
+        saveSessionState(phase0.sessionId, {
           processedAt: new Date().toISOString(),
           version: 'v2',
           segmentCount: 0,
           approvedSegments: 0,
           decisionCount: 0,
           decisionIds: [],
-        }
-        saveProcessed(processed)
+        })
         continue
       }
 
@@ -525,15 +536,14 @@ async function main(): Promise<void> {
       const approved = approvedSegments.filter(s => s.approved)
       if (approved.length === 0) {
         console.log(`    ○ No segments approved, skipping`)
-        processed[phase0.sessionId] = {
+        saveSessionState(phase0.sessionId, {
           processedAt: new Date().toISOString(),
           version: 'v2',
           segmentCount: segments.length,
           approvedSegments: 0,
           decisionCount: 0,
           decisionIds: [],
-        }
-        saveProcessed(processed)
+        })
         continue
       }
 
@@ -589,15 +599,14 @@ async function main(): Promise<void> {
       }
 
       // ─── Save state ─────────────────────────────────
-      processed[phase0.sessionId] = {
+      saveSessionState(phase0.sessionId, {
         processedAt: new Date().toISOString(),
         version: 'v2',
         segmentCount: segments.length,
         approvedSegments: approved.length,
         decisionCount: allDecisions.length,
         decisionIds: allDecisions.map(d => d.id),
-      }
-      saveProcessed(processed)
+      })
 
       console.log()
 

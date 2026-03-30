@@ -32,6 +32,8 @@ import { analyzeFunction } from '../core/analyze-function'
 import { loadTemplate, listTemplates } from '../core/template-loader'
 import { AnalyzeFunctionConfig, PendingDecisionOutput } from '../core/types'
 import { getFilesFromGraph, batchWriteDecisions, toNum } from '../ingestion/shared'
+import { loadState, saveState, getFileKey } from '../ingestion/state'
+import { getHeadCommit } from '../ingestion/git-utils'
 import fs from 'fs'
 import path from 'path'
 
@@ -294,6 +296,21 @@ async function analyzeSingle(): Promise<void> {
     if (!dryRun && result.decisions.length > 0) {
       const { nodes, anchored } = await batchWriteDecisions(session, result.decisions)
       console.log(`\n  📝 Written: ${nodes} decisions, ${anchored} anchored`)
+
+      // Update analysis state for refine staleness tracking
+      const analysisState = loadState()
+      const headCommit = getHeadCommit(repoConfig.path)
+      const key = getFileKey(repoName!, filePath!)
+      const existing = analysisState.files[key]
+      analysisState.files[key] = {
+        lastCommit: headCommit,
+        lastAnalyzedAt: new Date().toISOString(),
+        decisionIds: [
+          ...(existing?.decisionIds ?? []).filter(id => !result.decisions.some(d => d.id === id)),
+          ...result.decisions.map(d => d.id),
+        ],
+      }
+      saveState(analysisState)
     }
   } finally {
     await session.close()
@@ -356,6 +373,13 @@ async function fullScan(): Promise<void> {
     const progress = new ProgressTracker(remaining.length)
     const summary = new ResultsSummary()
     const budget = budgetLimit ? new BudgetTracker(budgetLimit) : null
+    const analysisState = loadState()
+    let headCommit: string
+    try {
+      headCommit = getHeadCommit(repoConfig.path)
+    } catch {
+      headCommit = 'unknown'
+    }
 
     // Graceful shutdown on Ctrl+C
     let interrupted = false
@@ -416,6 +440,21 @@ async function fullScan(): Promise<void> {
           summary.totalAnchored += anchored
         }
 
+        // Update analysis state for refine staleness tracking
+        if (!dryRun && result.decisions.length > 0) {
+          const key = getFileKey(repoName!, fn.filePath)
+          const existing = analysisState.files[key]
+          const newIds = result.decisions.map(d => d.id)
+          analysisState.files[key] = {
+            lastCommit: headCommit,
+            lastAnalyzedAt: new Date().toISOString(),
+            decisionIds: [
+              ...(existing?.decisionIds ?? []).filter(id => !newIds.includes(id)),
+              ...newIds,
+            ],
+          }
+        }
+
         // Track finding types
         for (const d of result.decisions) {
           summary.recordDecision(d)
@@ -437,6 +476,7 @@ async function fullScan(): Promise<void> {
         // Save state periodically (every 5 functions)
         if (summary.functionsProcessed % 5 === 0) {
           saveScanState(state)
+          saveState(analysisState)
         }
       } catch (err: any) {
         console.log(`  ${progressStr} ${fn.filePath}::${fn.name} — ✗ ${err.message}`)
@@ -447,6 +487,7 @@ async function fullScan(): Promise<void> {
 
     // 5. Final save and summary
     saveScanState(state)
+    saveState(analysisState)
     process.removeListener('SIGINT', onInterrupt)
 
     summary.functionsSkipped = analyzedSet.size

@@ -105,7 +105,7 @@ async function getCallersMultiLevel(
           })
         }
       } catch (e: any) {
-        if (DEBUG) console.log(`  [DEBUG] callers query error: ${e.message}`)
+        console.log(`  ⚠️ callers query failed for ${currentNames[i]}: ${e.message}`)
       }
     }
 
@@ -159,7 +159,9 @@ async function getCalleesMultiLevel(
             repo: r.get('calleeRepo') ?? repo,
           })
         }
-      } catch {}
+      } catch (e: any) {
+        console.log(`  ⚠️ callees query failed for ${currentNames[i]}: ${e.message}`)
+      }
     }
 
     if (levelNodes.length === 0) break

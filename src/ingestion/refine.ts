@@ -132,23 +132,26 @@ async function upgradeAnchors(session: Session): Promise<number> {
 
   let upgraded = 0
   for (const r of result.records) {
+    const dcId = r.get('dcId')
+    const fnId = r.get('fnId')
+    const fnName = r.get('fnName')
+    const filePath = r.get('filePath')
     try {
-      // 创建精确锚定
+      // 创建精确锚定 + 删除模糊锚定 in one query to avoid partial state
       await session.run(
         `MATCH (d:DecisionContext {id: $dcId})
          MATCH (fn:CodeEntity {id: $fnId})
-         MERGE (d)-[:ANCHORED_TO]->(fn)`,
-        { dcId: r.get('dcId'), fnId: r.get('fnId') }
-      )
-      // 删除模糊锚定
-      await session.run(
-        `MATCH (d:DecisionContext {id: $dcId})-[r:APPROXIMATE_TO]->(f:CodeEntity {path: $filePath})
+         MERGE (d)-[:ANCHORED_TO]->(fn)
+         WITH d
+         MATCH (d)-[r:APPROXIMATE_TO]->(f:CodeEntity {path: $filePath})
          DELETE r`,
-        { dcId: r.get('dcId'), filePath: r.get('filePath') }
+        { dcId, fnId, filePath }
       )
       upgraded++
-      console.log(`  ↑ ${r.get('dcId')} → ANCHORED_TO ${r.get('fnName')}`)
-    } catch {}
+      console.log(`  ↑ ${dcId} → ANCHORED_TO ${fnName}`)
+    } catch (err: any) {
+      console.log(`  ⚠️ Failed to upgrade anchor ${dcId} → ${fnName}: ${err.message}`)
+    }
   }
 
   console.log(`  ✅ ${upgraded}  anchors upgraded`)
