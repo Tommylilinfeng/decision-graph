@@ -11,6 +11,33 @@
 
 `get_context_for_code` 内部融合了锚点、关键词、关系链、向量四通道检索，是唯一需要的工具。
 
+## Pipeline 概览
+
+完整的分析管线（按执行顺序）：
+
+1. **Noise Filter** (`src/ingestion/noise-filter.ts`) — 标记 parser artifacts + trivial isolated 函数
+2. **Module Discovery** (`src/ingestion/module-discovery.ts`) — export-based 架构发现，IQR 拆分，排他目录分配
+3. **Sub-Module Discovery** (`src/ingestion/submodule-discovery.ts`) — 文件级 treemap 分组，LLM chunk+merge+assign
+4. **Doc Generation** (`src/ingestion/doc-generation.ts`) — per-sub-module 源码喂入 → per-module synthesis
+5. **Scenario Discovery** (`src/ingestion/scenario-discovery.ts`) — graph trace + source code → 场景文档
+
+### 关键 Runners
+
+```bash
+npm run discover-modules -- --repo X                    # module discovery (含 noise filter)
+npx ts-node src/runners/run-all-submodules.ts          # 全量 sub-module discovery
+npx ts-node src/runners/generate-docs.ts --repo X --module Y  # 文档生成
+npx ts-node src/runners/test-scenarios.ts --entry fnName      # scenario trace
+```
+
+### Dashboard
+
+```bash
+npm run dashboard                                       # http://localhost:3001
+# /architecture-map — 3D 爆炸图 + scenario 联动
+# /architecture — 模块文档浏览
+```
+
 ## 测试规则
 
 Runner 会调用 LLM API，消耗 token 预算。**禁止直接全量运行 runner 来验证代码。**

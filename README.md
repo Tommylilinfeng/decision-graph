@@ -11,11 +11,12 @@ Existing context engineering tools (OpenSpec, Git-AI, Dexicon) capture knowledge
 - **Runs overnight on your subscription** — uses `claude -p` or `codex exec` (Claude CLI / Codex CLI), no API costs, doesn't eat your daytime quota
 
 ```
-Codebase → Export Scan → Module Discovery (LLM + IQR + Import Analysis)
-    → Design Analysis (sub-module decomposition)
-        → LLM extracts decisions per sub-module
-            → Memgraph (graph DB) → MCP Server
-                → Claude Code queries context while you code
+Codebase → Noise Filter → Module Discovery (LLM + IQR + Import Analysis)
+    → Sub-Module Discovery (file-level treemap grouping)
+        → Doc Generation (source-level, per sub-module → module synthesis)
+            → Scenario Tracing (graph BFS + LLM narrative)
+                → Memgraph (graph DB) → MCP Server + Dashboard
+                    → 3D Architecture Map + Scenario Walkthrough
 ```
 
 > **System requirements:** Context Chain relies on **Memgraph** (graph database, ~1.5 GB) and **Joern** (code analysis, ~2 GB) — expect **~3.5 GB+ disk space** and Docker installed. This is a relatively heavy local tool, not a lightweight plugin.
@@ -60,8 +61,9 @@ From the Dashboard:
 1. **System** → Add your repo (name, path, language)
 2. **System** → Generate CPG (Joern code analysis)
 3. **System** → Full Setup (schema + import code structure)
-4. **Design** → Discover Modules → see module stats → Run sub-module decomposition per module
-5. **Run** → Execute analysis → decisions appear, then **Group** to connect them
+4. **Design** → Discover Modules → Run sub-module decomposition
+5. **Exploded Map** → 3D architecture visualization with scenario tracing
+6. **Run** → Execute analysis → decisions appear, then **Group** to connect them
 
 Or from CLI:
 
@@ -161,38 +163,67 @@ Automatically discovers the architectural module structure of a codebase using e
 - IQR outlier detection is project-agnostic — adapts without hardcoded thresholds
 - Foundation modules are kept large intentionally — per DDD's "Shared Kernel" pattern, cross-cutting infrastructure belongs in a dedicated layer
 
+Now includes a **noise filter** pre-step that marks parser artifacts (`:program`) and trivial isolated functions before module assignment. Exclusive directory matching ensures no function belongs to multiple modules.
+
 **Output:** `SemanticModule` nodes in the graph with `BELONGS_TO` edges.
 
 ```bash
-npm run discover-modules -- --repo my-repo              # full run
+npm run discover-modules -- --repo my-repo              # full run (includes noise filter)
 npm run discover-modules -- --repo my-repo --dry-run    # preview without writing to graph
-npm run discover-modules -- --repo my-repo --chunks 5 --concurrency 5
 ```
 
-Tested on Claude Code (1,902 files, 7,867 exports): 22 modules, 100% function coverage, ~213s. Matched 10/14 chapters from [human-curated architecture analysis](https://github.com/Windy3f3f3f3f/how-claude-code-works).
+Tested on Claude Code (1,902 files): 39 modules, 10,445 signal functions (3,447 noise filtered), 100% coverage, ~24K tokens, ~215s.
 
-### Design Analysis
+### Sub-Module Discovery
 
-Decomposes semantic modules into sub-modules — bridging the gap between coarse modules (100-500 functions) and individual functions.
+File-level architecture discovery within each module — same philosophy as module discovery (exports as signal, files as unit), applied recursively.
 
-**Pipeline (3 layers, no Layer 3-5 yet — moved to future sub-module analysis):**
-1. **Layer 0: Orphan Backfill** — pure graph operations, no LLM. Recovers functions missed by community detection:
-   - File-level: orphan functions inherit their file's dominant module
-   - Directory-level: fully-orphan files get grouped into directory-based modules (e.g. `[dir] ink`, `[dir] commands`)
-   - Raises coverage from ~50% to ~99%
-2. **Layer 2: Sub-Module Decomposition** — LLM per module. Sees function names + source code (configurable lines) + internal call edges. Produces 5-20 sub-modules per module.
-3. **Layer 2.5: Misassigned Reassignment** — LLM reviews functions flagged as misassigned and either reassigns or marks as infrastructure.
+**Pipeline (per module, 1-3 LLM calls):**
+1. **File Export Scan** — get all files belonging to module from graph, scan exports
+2. **LLM Chunk + Merge** — for large modules (100+ files), chunk files and merge sub-module candidates
+3. **LLM Assign** — assign every file to exactly one sub-module. Cohesive modules auto-promoted as single sub-module (no LLM needed)
 
 ```bash
-npm run design-analysis -- --repo my-repo --stats               # preview: module stats, histograms, token estimates
-npm run design-analysis -- --repo my-repo --max-lines 10        # run with 10 lines of source per function
-npm run design-analysis -- --repo my-repo --backfill --dry-run  # backfill only (no LLM)
-npm run design-analysis -- --repo my-repo --limit 2 --dry-run   # test 2 modules
+npx ts-node src/runners/run-all-submodules.ts           # all modules
+npx ts-node src/runners/test-submodules.ts              # test on foundation + tool_framework
 ```
 
-Also available in the Dashboard under **Design** — with per-module stats cards, per-module Run buttons, real-time SSE log, and interactive module map visualization.
+Tested on Claude Code: **262 sub-modules** across 39 modules, 100% coverage, 113K tokens, ~27 min. Zero Other/Unclassified.
 
-**Output:** `SubModule` nodes with `CHILD_OF` → `SemanticModule` and `BELONGS_TO` edges (many-to-many).
+**Output:** `SubModule` nodes with `CHILD_OF` → `SemanticModule` and `BELONGS_TO` edges.
+
+### Documentation Generation
+
+Two-tier source-level doc generation: full source code feeds per-sub-module analysis, then module-level synthesis.
+
+**Pipeline:**
+1. **Per sub-module** — read all source files, 1 LLM call → deep technical doc with design decisions from code + comments
+2. **Per module synthesis** — sub-module docs + importance signals (external caller count) → unified module guide. Organizes by concepts, not sub-module boundaries. Core sub-modules get 80% of coverage.
+
+```bash
+npx ts-node src/runners/generate-docs.ts --repo my-repo --module tool_framework
+npx ts-node src/runners/generate-docs.ts --repo my-repo --module foundation --module memory_system
+```
+
+### Scenario Discovery & Visualization
+
+Cross-module execution path tracing with interactive 3D architecture map.
+
+**Scenario tracing:**
+- Graph BFS from entry point functions, 3-hop depth, cross-module edges only
+- Caller-grouped steps (fan-out pattern): "A calls B, C, D" as one step
+- LLM narrative generation guided by user prompts + sub-module docs
+
+**Architecture map** (`/architecture-map` on dashboard):
+- Isometric 3D exploded view: per-module boards with treemap-packed sub-module chips
+- Shift+drag rotation, scroll zoom, click-to-inspect detail panel
+- Scenario overlay: select entry point or type a question → involved sub-modules highlight, animated flow lines between layers
+- Balanced layout: weighted centroid algorithm centers large modules
+
+```bash
+npx ts-node src/runners/test-scenarios.ts --entry checkPermissionsAndCallTool
+npm run dashboard  # → http://localhost:3001/architecture-map
+```
 
 ### MCP Server
 
