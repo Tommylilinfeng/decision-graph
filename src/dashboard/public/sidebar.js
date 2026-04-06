@@ -46,7 +46,7 @@ var I18N = {
     'brand.name': 'Context Chain',
     'brand.tagline': 'grep finds what code does.<br>We record why it was written that way.',
     'nav.explore': 'Explore', 'nav.data': 'Data', 'nav.pipeline': 'Pipeline', 'nav.admin': 'Admin',
-    'nav.packages': 'Packages', 'nav.architecture': 'Architecture',
+    'nav.packages': 'Packages', 'nav.architecture': 'Architecture', 'nav.archmap': 'Exploded Map',
     'nav.overview': 'Overview', 'nav.decisions': 'Decisions', 'nav.relationships': 'Relationships', 'nav.concerns': 'Concerns',
     'nav.coverage': 'Coverage', 'nav.dependencies': 'Dependencies', 'nav.feedback': 'Feedback',
     'nav.graph': 'Graph',
@@ -81,7 +81,7 @@ var I18N = {
     'brand.name': 'Context Chain',
     'brand.tagline': 'grep 找的是代码写了什么<br>我们记录的是代码为什么这样写',
     'nav.explore': '浏览', 'nav.data': '数据', 'nav.pipeline': '管线', 'nav.admin': '管理',
-    'nav.packages': '代码包', 'nav.architecture': '架构文档',
+    'nav.packages': '代码包', 'nav.architecture': '架构文档', 'nav.archmap': '爆炸图',
     'nav.overview': '概览', 'nav.decisions': '决策', 'nav.relationships': '关系图', 'nav.concerns': '关注点',
     'nav.coverage': '覆盖率', 'nav.dependencies': '依赖', 'nav.feedback': '反馈',
     'nav.graph': '图谱',
@@ -126,6 +126,7 @@ var PAGE_KEY_MAP = {
   '/run': 'run', '/group': 'group', '/design': 'design', '/localize': 'localize', '/history': 'history', '/schedule': 'schedule',
   '/query': 'query', '/system': 'system', '/onboarding': 'onboarding',
   '/architecture': 'architecture',
+  '/architecture-map': 'architecture-map',
 }
 
 function translatePageHero() {
@@ -153,6 +154,7 @@ var NAV = [
     { href: '/overview',       iconKey: 'overview',      key: 'nav.overview' },
     { href: '/decisions',      iconKey: 'decisions',     key: 'nav.decisions' },
     { href: '/architecture',   iconKey: 'architecture',  key: 'nav.architecture' },
+    { href: '/architecture-map', iconKey: 'packages',   key: 'nav.archmap' },
   ], subgroups: [
     { id: 'graph', titleKey: 'nav.graph', defaultOpen: false, items: [
       { href: '/relationships',  iconKey: 'relationships', key: 'nav.relationships' },

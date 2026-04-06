@@ -5262,6 +5262,361 @@ app.get('/api/graph/submodule-edges', async (c) => {
   }
 })
 
+// GET /api/scenarios/trace — trace cross-module call graph from an entry function
+app.get('/api/scenarios/trace', async (c) => {
+  const config = loadConfig()
+  const repoName = c.req.query('repo') || config.repos?.[0]?.name
+  const entryName = c.req.query('entry')
+  if (!entryName) return c.json({ error: 'missing ?entry= param' }, 400)
+
+  const session = await getSession()
+  try {
+    // Find entry function + file
+    const entryRes = await session.run(
+      `MATCH (fn:CodeEntity {entity_type: 'function', name: $name, repo: $repo})
+       MATCH (f:CodeEntity {entity_type: 'file'})-[:CONTAINS]->(fn)
+       OPTIONAL MATCH (fn)-[:BELONGS_TO]->(sm:SemanticModule)
+       OPTIONAL MATCH (fn)-[:BELONGS_TO]->(sub:SubModule)
+       RETURN f.path AS file, sm.id AS modId, sub.id AS subId
+       LIMIT 1`,
+      { name: entryName, repo: repoName },
+    )
+    if (entryRes.records.length === 0) return c.json({ error: 'function not found' }, 404)
+    const entryFile = entryRes.records[0].get('file')
+
+    // BFS: 3 hops, only cross-module edges after depth 0
+    const visited = new Set()
+    const nodes: any[] = []
+    const edges: any[] = []
+    let frontier = [{ name: entryName, file: entryFile }]
+
+    for (let depth = 0; depth < 3 && frontier.length > 0; depth++) {
+      const next: any[] = []
+      for (const { name: fnName, file: fnFile } of frontier) {
+        const key = `${fnFile}::${fnName}`
+        if (visited.has(key)) continue
+        visited.add(key)
+
+        // Get node info
+        const nodeRes = await session.run(
+          `MATCH (fn:CodeEntity {entity_type: 'function', name: $name, repo: $repo})
+           MATCH (f:CodeEntity {entity_type: 'file', path: $file})-[:CONTAINS]->(fn)
+           OPTIONAL MATCH (fn)-[:BELONGS_TO]->(sm:SemanticModule)
+           OPTIONAL MATCH (fn)-[:BELONGS_TO]->(sub:SubModule)
+           RETURN sm.id AS modId, sm.name AS modName, sub.id AS subId, sub.name AS subName`,
+          { name: fnName, file: fnFile, repo: repoName },
+        )
+        if (nodeRes.records.length > 0) {
+          const r = nodeRes.records[0]
+          nodes.push({
+            key, name: fnName, file: fnFile,
+            modId: r.get('modId'), modName: r.get('modName'),
+            subId: r.get('subId'), subName: r.get('subName'),
+            depth,
+          })
+        }
+
+        // Get callees
+        const callRes = await session.run(
+          `MATCH (fn:CodeEntity {entity_type: 'function', name: $name, repo: $repo})
+           MATCH (f:CodeEntity {entity_type: 'file', path: $file})-[:CONTAINS]->(fn)
+           MATCH (fn)-[:CALLS]->(callee:CodeEntity {entity_type: 'function'})
+           WHERE callee.noise IS NULL OR callee.noise <> true
+           MATCH (cf:CodeEntity {entity_type: 'file'})-[:CONTAINS]->(callee)
+           OPTIONAL MATCH (fn)-[:BELONGS_TO]->(sm1:SemanticModule)
+           OPTIONAL MATCH (callee)-[:BELONGS_TO]->(sm2:SemanticModule)
+           RETURN callee.name AS calleeName, cf.path AS calleeFile, sm1.id AS fromMod, sm2.id AS toMod`,
+          { name: fnName, file: fnFile, repo: repoName },
+        )
+        for (const cr of callRes.records) {
+          const cn = cr.get('calleeName')
+          const cf = cr.get('calleeFile')
+          const fromMod = cr.get('fromMod')
+          const toMod = cr.get('toMod')
+          const cross = fromMod !== toMod
+          edges.push({ from: key, to: `${cf}::${cn}`, fromMod, toMod, crossModule: cross })
+          if (cross || depth === 0) next.push({ name: cn, file: cf })
+        }
+      }
+      frontier = next
+    }
+
+    // Aggregate: which modules and sub-modules are involved
+    const involvedMods = new Set(nodes.map(n => n.modId).filter(Boolean))
+    const involvedSubs = new Set(nodes.map(n => n.subId).filter(Boolean))
+
+    // Sub-module level flows
+    const subFlows = new Map()
+    for (const e of edges) {
+      if (!e.crossModule) continue
+      const fromNode = nodes.find(n => n.key === e.from)
+      const toNode = nodes.find(n => n.key === e.to)
+      if (!fromNode?.subId || !toNode?.subId) continue
+      const k = `${fromNode.subId}→${toNode.subId}`
+      subFlows.set(k, (subFlows.get(k) || 0) + 1)
+    }
+    const flows = Array.from(subFlows.entries()).map(([k, w]) => {
+      const [from, to] = k.split('→')
+      return { fromSub: from, toSub: to, weight: w }
+    })
+
+    // Build caller-grouped steps: each group = one sub-module's fan-out
+    // "A calls B, C, D" → group { caller: A, callees: [B, C, D] }
+    const subInfo = new Map()
+    for (const n of nodes) {
+      if (!n.subId) continue
+      if (!subInfo.has(n.subId)) {
+        subInfo.set(n.subId, {
+          subId: n.subId, subName: n.subName || n.subId,
+          modId: n.modId, modName: n.modName || n.modId,
+          depth: n.depth, functions: [],
+        })
+      }
+      const si = subInfo.get(n.subId)
+      si.depth = Math.min(si.depth, n.depth)
+      si.functions.push({ name: n.name, file: n.file })
+    }
+
+    // Build sub-module level adjacency from flows
+    const subCallees = new Map() // callerId → Set<calleeId>
+    for (const f of flows) {
+      if (!subCallees.has(f.fromSub)) subCallees.set(f.fromSub, new Set())
+      subCallees.get(f.fromSub).add(f.toSub)
+    }
+
+    // Walk from entry: BFS at sub-module level, emit caller-grouped steps
+    const entryNode = nodes.find(n => n.depth === 0)
+    const entrySub = entryNode?.subId
+    const walkedSubs = new Set()
+    const steps: any[] = []
+    const queue = entrySub ? [entrySub] : []
+
+    while (queue.length > 0) {
+      const callerId = queue.shift()!
+      if (walkedSubs.has(callerId)) continue
+      walkedSubs.add(callerId)
+
+      const callerInfo = subInfo.get(callerId)
+      // All callees this sub-module calls (from original flow data, not filtered by visited)
+      const allCalleeIds = Array.from(subCallees.get(callerId) || []).filter(id => subInfo.has(id))
+      // New callees to explore (not yet walked)
+      const newCalleeIds = allCalleeIds.filter(id => !walkedSubs.has(id))
+
+      // Only emit a step if this node has outgoing flows OR is the entry
+      if (allCalleeIds.length > 0 || callerId === entrySub) {
+        steps.push({
+          caller: callerInfo || { subId: callerId, subName: callerId, modName: '?' },
+          callees: allCalleeIds.map(id => subInfo.get(id)).filter(Boolean),
+        })
+      }
+
+      for (const cid of newCalleeIds) queue.push(cid)
+    }
+
+    return c.json({
+      entry: entryName,
+      nodeCount: nodes.length,
+      involvedModules: Array.from(involvedMods),
+      involvedSubModules: Array.from(involvedSubs),
+      steps,
+      flows,
+    })
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500)
+  } finally {
+    await session.close()
+  }
+})
+
+// POST /api/scenarios/guided — LLM-guided scenario from user prompt
+app.post('/api/scenarios/guided', async (c) => {
+  const config = loadConfig()
+  const repoName = c.req.query('repo') || config.repos?.[0]?.name
+  const body = await c.req.json() as any
+  const userPrompt = body?.prompt
+  if (!userPrompt) return c.json({ error: 'missing prompt' }, 400)
+
+  const session = await getSession()
+  const ai = createAIProvider(config.ai as any)
+
+  try {
+    // Step 1: Extract keywords locally (no LLM needed)
+    // Map common concepts to code-level terms
+    const conceptMap: Record<string, string[]> = {
+      'bash': ['bash', 'shell', 'command', 'permission'],
+      'shell': ['bash', 'shell', 'command'],
+      'compact': ['compact', 'compaction'],
+      'compress': ['compact', 'compaction'],
+      '压缩': ['compact'],
+      'mcp': ['mcp', 'connectToServer', 'mcpTool'],
+      'agent': ['agent', 'spawn', 'teammate', 'swarm'],
+      'memory': ['memory', 'memdir', 'recall', 'remember'],
+      'permission': ['permission', 'security', 'sandbox', 'classify'],
+      'tool': ['tool', 'execute', 'streaming'],
+      'plugin': ['plugin', 'skill', 'marketplace'],
+      'auth': ['auth', 'oauth', 'token', 'credential'],
+      'prompt': ['prompt', 'context', 'system'],
+      'hook': ['hook', 'lifecycle'],
+      'render': ['ink', 'render', 'screen'],
+      'edit': ['fileEdit', 'edit', 'write'],
+      'search': ['grep', 'glob', 'search', 'toolSearch'],
+      'lsp': ['lsp', 'diagnostic', 'intelligence'],
+      'bridge': ['bridge', 'remote', 'websocket'],
+      'setting': ['setting', 'config', 'migration'],
+    }
+    const words = userPrompt.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/)
+    const keywords = new Set<string>()
+    for (const w of words) {
+      if (conceptMap[w]) conceptMap[w].forEach(k => keywords.add(k))
+      else if (w.length > 2) keywords.add(w)
+    }
+    const kwList = Array.from(keywords)
+
+    // Step 2: Search graph for functions matching keywords, ranked by cross-module span
+    let selectedEntry: any = null
+    let entryReason = ''
+
+    for (const kw of kwList) {
+      if (selectedEntry) break
+      // Search by file path (most specific) — e.g. "bash" matches tools/BashTool/
+      const searchRes = await session.run(
+        `MATCH (fn:CodeEntity {entity_type: 'function', repo: $repo})
+         WHERE (fn.noise IS NULL OR fn.noise <> true)
+         MATCH (f:CodeEntity {entity_type: 'file'})-[:CONTAINS]->(fn)
+         WHERE toLower(f.path) CONTAINS toLower($kw)
+           AND NOT f.path STARTS WITH 'components/'
+           AND NOT f.path CONTAINS '/components/'
+         MATCH (fn)-[:CALLS]->(callee:CodeEntity {entity_type: 'function'})
+         MATCH (callee)-[:BELONGS_TO]->(sm:SemanticModule)
+         MATCH (fn)-[:BELONGS_TO]->(sm2:SemanticModule)
+         WHERE sm.id <> sm2.id
+         WITH fn, f, count(DISTINCT sm) AS span
+         WHERE span >= 2
+         RETURN fn.name AS name, f.path AS file, span
+         ORDER BY span DESC LIMIT 1`,
+        { repo: repoName, kw },
+      )
+      if (searchRes.records.length > 0) {
+        const r = searchRes.records[0]
+        selectedEntry = { name: r.get('name'), file: r.get('file') }
+        entryReason = `matched keyword "${kw}" with ${num(r.get('span'))} module span`
+      }
+    }
+
+    // Fallback: get the top cross-module function overall
+    if (!selectedEntry) {
+      const fallbackRes = await session.run(
+        `MATCH (fn:CodeEntity {entity_type: 'function', repo: $repo})-[:CALLS]->(callee:CodeEntity)
+         WHERE (fn.noise IS NULL OR fn.noise <> true)
+         MATCH (fn)-[:BELONGS_TO]->(sm:SemanticModule)
+         MATCH (callee)-[:BELONGS_TO]->(sm2:SemanticModule)
+         WHERE sm.id <> sm2.id
+         WITH fn, count(DISTINCT sm2) AS span
+         MATCH (f:CodeEntity {entity_type: 'file'})-[:CONTAINS]->(fn)
+         RETURN fn.name AS name, f.path AS file, span
+         ORDER BY span DESC LIMIT 1`,
+        { repo: repoName },
+      )
+      if (fallbackRes.records.length > 0) {
+        selectedEntry = { name: fallbackRes.records[0].get('name'), file: fallbackRes.records[0].get('file') }
+        entryReason = 'fallback: highest cross-module span'
+      }
+    }
+
+    if (!selectedEntry) return c.json({ error: 'no matching entry point' }, 404)
+
+    // Step 3: Run trace (reuse the trace logic)
+    const traceRes = await fetch(`http://localhost:${config.dashboard?.port || 3001}/api/scenarios/trace?entry=${encodeURIComponent(selectedEntry.name)}&repo=${repoName}`)
+    const traceData = await traceRes.json() as any
+
+    // Step 4: Load involved sub-module docs if they exist
+    const subDocs: string[] = []
+    const fs = await import('fs')
+    const path = await import('path')
+    for (const subId of (traceData.involvedSubModules || []).slice(0, 8)) {
+      // Try to find the sub-module doc
+      const parts = subId.split('_')
+      // Module ID is the part before the sub-module name
+      for (const modId of traceData.involvedModules || []) {
+        if (subId.startsWith(modId + '_')) {
+          const subName = subId.slice(modId.length + 1)
+          const docPath = path.join('data', 'docs', repoName!, modId, subName + '.md')
+          try {
+            const content = fs.readFileSync(docPath, 'utf-8')
+            subDocs.push(`## ${subId}\n${content.slice(0, 800)}`)
+          } catch {}
+          break
+        }
+      }
+    }
+
+    // Step 5: LLM generates guided narrative
+    const narrativePrompt = `User question: "${userPrompt}"
+
+Entry point: ${selectedEntry.name} (${selectedEntry.file})
+${entryReason ? `Why: ${entryReason}` : ''}
+
+Trace: ${traceData.steps?.length || 0} sub-modules involved across ${traceData.involvedModules?.length || 0} modules.
+
+Sub-module flow path:
+${(traceData.steps || []).map((s: any) => `  depth ${s.depth}: ${s.subName} (${s.modName}) — ${s.functions?.map((f: any) => f.name).join(', ')}`).join('\n')}
+
+Cross-module flows:
+${(traceData.flows || []).slice(0, 15).map((f: any) => `  ${f.fromSub} → ${f.toSub} (${f.weight})`).join('\n')}
+
+${subDocs.length > 0 ? 'Sub-module documentation excerpts:\n' + subDocs.join('\n\n') : ''}
+
+Write a concise scenario walkthrough (400-800 words) that answers the user's question by tracing through the code path. Use function names and file paths. Explain branch points and error paths. Write in Chinese. Return plain markdown (no code fences around the whole response).`
+
+    const narrative = await ai.call(narrativePrompt, { timeoutMs: 120000 })
+    const narrativeTokens = (ai.lastUsage?.input_tokens ?? 0) + (ai.lastUsage?.output_tokens ?? 0)
+
+    ai.cleanup()
+    return c.json({
+      ...traceData,
+      entryReason,
+      narrative,
+      tokens: narrativeTokens,
+    })
+  } catch (err: any) {
+    ai.cleanup()
+    return c.json({ error: err.message }, 500)
+  } finally {
+    await session.close()
+  }
+})
+
+// GET /api/scenarios/entries — list top cross-module entry points
+app.get('/api/scenarios/entries', async (c) => {
+  const config = loadConfig()
+  const repoName = c.req.query('repo') || config.repos?.[0]?.name
+  const session = await getSession()
+  try {
+    const res = await session.run(
+      `MATCH (fn:CodeEntity {entity_type: 'function', repo: $repo})-[:CALLS]->(callee:CodeEntity {entity_type: 'function'})
+       WHERE (fn.noise IS NULL OR fn.noise <> true)
+       MATCH (fn)-[:BELONGS_TO]->(sm:SemanticModule)
+       MATCH (callee)-[:BELONGS_TO]->(sm2:SemanticModule)
+       WHERE sm.id <> sm2.id
+       WITH fn, sm, count(DISTINCT sm2) AS span
+       WHERE span >= 3
+       MATCH (f:CodeEntity {entity_type: 'file'})-[:CONTAINS]->(fn)
+       RETURN fn.name AS name, f.path AS file, sm.name AS module, span
+       ORDER BY span DESC LIMIT 20`,
+      { repo: repoName },
+    )
+    const entries = res.records.map(r => ({
+      name: r.get('name'), file: r.get('file'),
+      module: r.get('module'), span: num(r.get('span')),
+    }))
+    return c.json({ entries })
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500)
+  } finally {
+    await session.close()
+  }
+})
+
 // GET /api/scenarios/concerns — cross-cutting concern search
 app.get('/api/scenarios/concerns', async (c) => {
   const config = loadConfig()

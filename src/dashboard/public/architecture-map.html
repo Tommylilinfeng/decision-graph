@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CKG — Architecture Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/shared.css">
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<style>
+.main { display:flex; flex-direction:column; height:100vh; overflow:hidden; }
+.toolbar {
+  padding:10px 20px; display:flex; align-items:center; gap:16px;
+  border-bottom:1px solid var(--border-subtle); flex-shrink:0;
+  background:var(--surface-0);
+}
+.toolbar h1 { font-size:14px; font-weight:700; }
+.toolbar .sep { width:1px; height:20px; background:var(--border); }
+.toolbar .hint { font-size:11px; color:var(--text-dim); font-family:var(--mono); }
+.canvas-wrap { flex:1; overflow:hidden; position:relative; cursor:grab; }
+.canvas-wrap:active { cursor:grabbing; }
+.canvas-wrap svg { display:block; width:100%; height:100%; }
+
+/* Tooltip */
+.tooltip {
+  position:fixed; pointer-events:none; z-index:100;
+  background:var(--surface-2); border:1px solid var(--border);
+  border-radius:8px; padding:10px 14px; max-width:340px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.5); opacity:0; transition:opacity 0.12s;
+}
+.tooltip.show { opacity:1; }
+.tooltip-title { font-size:12px; font-weight:700; margin-bottom:4px; }
+.tooltip-desc { font-size:11px; color:var(--text-secondary); line-height:1.5; }
+.tooltip-stat { font-size:10px; color:var(--text-dim); font-family:var(--mono); margin-top:4px; }
+
+/* Detail panel */
+.detail-panel {
+  position:absolute; top:0; right:0; width:380px; height:100%;
+  background:var(--surface-0); border-left:1px solid var(--border);
+  transform:translateX(100%); transition:transform 0.3s cubic-bezier(0.16,1,0.3,1);
+  z-index:50; overflow-y:auto; padding:20px;
+}
+.detail-panel.open { transform:translateX(0); }
+.detail-close {
+  position:absolute; top:12px; right:12px; width:28px; height:28px;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:6px;
+  color:var(--text-dim); cursor:pointer; display:flex; align-items:center; justify-content:center;
+  font-size:14px;
+}
+.detail-close:hover { background:var(--surface-3); color:var(--text); }
+.detail-title { font-size:16px; font-weight:700; margin-bottom:4px; padding-right:36px; }
+.detail-desc { font-size:12px; color:var(--text-secondary); line-height:1.5; margin-bottom:16px; }
+.detail-stats { display:flex; gap:16px; margin-bottom:16px; }
+.detail-stat-val { font-size:20px; font-weight:700; font-family:var(--mono); color:var(--accent); }
+.detail-stat-label { font-size:10px; color:var(--text-dim); text-transform:uppercase; }
+.sub-list-title { font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; }
+.sub-item {
+  display:flex; align-items:center; gap:10px; padding:8px 10px;
+  background:var(--surface-1); border:1px solid var(--border-subtle); border-radius:6px;
+  margin-bottom:4px; font-size:12px;
+}
+.sub-item-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+.sub-item-name { flex:1; font-weight:500; }
+.sub-item-count { font-family:var(--mono); font-size:10px; color:var(--text-dim); }
+
+/* Scenario selector */
+.scenario-select {
+  background:var(--surface-2); border:1px solid var(--border); border-radius:6px;
+  color:var(--text); font-family:var(--mono); font-size:11px; padding:4px 8px;
+  cursor:pointer; min-width:200px;
+}
+.scenario-select:focus { outline:none; border-color:var(--accent); }
+.scenario-btn {
+  background:var(--surface-2); border:1px solid var(--border); border-radius:6px;
+  color:var(--text-dim); font-size:11px; padding:4px 10px; cursor:pointer;
+}
+.scenario-btn:hover { border-color:var(--accent); color:var(--text); }
+
+/* Step panel — scenario walkthrough */
+.step-panel {
+  position:absolute; top:0; left:0; width:340px; height:100%;
+  background:var(--surface-0); border-right:1px solid var(--border);
+  transform:translateX(-100%); transition:transform 0.3s cubic-bezier(0.16,1,0.3,1);
+  z-index:50; overflow-y:auto; display:flex; flex-direction:column;
+}
+.step-panel.open { transform:translateX(0); }
+.step-panel-header {
+  padding:16px 16px 12px; border-bottom:1px solid var(--border-subtle); flex-shrink:0;
+}
+.step-panel-title { font-size:14px; font-weight:700; margin-bottom:2px; }
+.step-panel-sub { font-size:11px; color:var(--text-dim); font-family:var(--mono); }
+.step-list { flex:1; overflow-y:auto; padding:8px; }
+.step-item {
+  padding:10px 12px; border-radius:8px; margin-bottom:4px;
+  cursor:pointer; transition:all 0.15s; border:1px solid transparent;
+}
+.step-item:hover { background:var(--surface-1); }
+.step-item.active { background:var(--accent-surface); border-color:var(--accent-border); }
+.step-item.visited { opacity:0.6; }
+.step-depth { font-size:9px; font-family:var(--mono); color:var(--text-dim); margin-bottom:2px; }
+.step-submod { font-size:12px; font-weight:600; margin-bottom:2px; }
+.step-mod { font-size:10px; color:var(--text-secondary); }
+.step-file { font-size:9px; color:var(--text-dim); font-family:var(--mono); margin-top:3px; }
+.step-flow-arrow { color:var(--green); font-size:10px; margin:2px 0 2px 16px; font-family:var(--mono); }
+.step-narrative { padding:12px; font-size:12px; color:var(--text-secondary); line-height:1.6; border-top:1px solid var(--border-subtle); }
+.step-narrative h3 { font-size:13px; color:var(--text); margin:12px 0 4px; }
+.step-narrative code { font-family:var(--mono); font-size:10px; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+.step-narrative p { margin:6px 0; }
+.step-loading { padding:16px; color:var(--text-dim); font-size:11px; font-family:var(--mono); }
+
+/* Flow line animation */
+@keyframes flowDash { to { stroke-dashoffset: -20; } }
+.flow-line { animation: flowDash 1s linear infinite; }
+</style>
+</head>
+<body>
+<nav class="sidebar" id="sidebar"></nav>
+<div class="main">
+  <div class="toolbar">
+    <h1>Exploded Architecture</h1>
+    <div class="sep"></div>
+    <select class="scenario-select" id="scenarioSelect">
+      <option value="">— Select Entry Point —</option>
+    </select>
+    <div class="sep"></div>
+    <input type="text" class="scenario-select" id="scenarioPrompt" placeholder="or describe a scenario..." style="min-width:280px">
+    <button class="scenario-btn" id="scenarioGo">Trace</button>
+    <button class="scenario-btn" id="scenarioClear" style="display:none">Clear</button>
+    <div class="sep"></div>
+    <span class="hint">scroll to zoom · drag to pan · shift+drag to rotate</span>
+  </div>
+  <div class="canvas-wrap" id="canvasWrap">
+    <svg id="svg"></svg>
+    <div class="step-panel" id="stepPanel">
+      <div class="step-panel-header">
+        <div class="step-panel-title" id="stepTitle"></div>
+        <div class="step-panel-sub" id="stepSub"></div>
+      </div>
+      <div class="step-list" id="stepList"></div>
+    </div>
+    <div class="tooltip" id="tooltip">
+      <div class="tooltip-title" id="ttTitle"></div>
+      <div class="tooltip-desc" id="ttDesc"></div>
+      <div class="tooltip-stat" id="ttStat"></div>
+    </div>
+    <div class="detail-panel" id="detailPanel">
+      <div class="detail-close" id="detailClose">&times;</div>
+      <div id="detailContent"></div>
+    </div>
+  </div>
+</div>
+<script src="/sidebar.js"></script>
+<script>
+// ── Tier config ────────────────────────────────
+const TIER_MAP = {
+  'foundation':0,
+  'entrypoints_bootstrap':1,'api_client':1,'settings_config':1,
+  'analytics_telemetry':1,'auth_credentials':1,'native_installer':1,
+  'lsp_service':1,'git_operations':1,'terminal_io':1,
+  'permission_security':2,'mcp_integration':2,'context_prompt':2,
+  'memory_system':2,'task_planning':2,
+  'tool_framework':3,'command_system':3,'agent_task_system':3,
+  'plugin_skill_system':3,
+  'remote_connectivity':4,'computer_use':4,'deep_links':4,'voice_input':4,
+  'companion_system':4,
+}
+const TIER_NAMES = ['Foundation','Infrastructure','Core Logic','Orchestration','Connectivity','UI']
+const TIER_PALETTE = [
+  {top:'#1e3a5f', side:'#152d4d', front:'#17324f', chip:'#4d9fff', chipBg:'rgba(77,159,255,0.10)', text:'#8bbfff', label:'#a0cfff'},
+  {top:'#2d1f4d', side:'#231840', front:'#281b45', chip:'#a07cff', chipBg:'rgba(160,124,255,0.10)', text:'#b99fff', label:'#c9b5ff'},
+  {top:'#1a3a2a', side:'#132e20', front:'#163224', chip:'#3dd68c', chipBg:'rgba(61,214,140,0.10)', text:'#6ee7b7', label:'#87edd0'},
+  {top:'#3a2a1a', side:'#2e2013', front:'#322316', chip:'#f5a623', chipBg:'rgba(245,166,35,0.10)', text:'#fbbf24', label:'#fcd87c'},
+  {top:'#3a1a30', side:'#2e1326', front:'#32162a', chip:'#f06292', chipBg:'rgba(240,98,146,0.10)', text:'#f48fb1', label:'#f8b4cc'},
+  {top:'#1a2d3a', side:'#13232e', front:'#162632', chip:'#22d3ee', chipBg:'rgba(34,211,238,0.10)', text:'#67e8f9', label:'#99f0ff'},
+]
+
+// ── Isometric projection ───────────────────────
+// Transform a flat (x,y) rectangle into an isometric parallelogram
+// viewed from lower-left, looking up-right
+// Mutable camera angles — updated by drag rotation
+let camRotZ = 45 * Math.PI / 180   // turntable rotation (left-right)
+let camRotX = 30 * Math.PI / 180   // tilt (up-down, 0=top-down, 90=side-on)
+
+function isoX(x, y) {
+  return x * Math.cos(camRotZ) - y * Math.sin(camRotZ)
+}
+function isoY(x, y) {
+  return (x * Math.sin(camRotZ) + y * Math.cos(camRotZ)) * Math.sin(camRotX)
+}
+
+// Convert a flat rect (x,y,w,h) to isometric quad points (top face)
+function isoQuad(x, y, w, h) {
+  return [
+    [isoX(x, y),       isoY(x, y)],
+    [isoX(x+w, y),     isoY(x+w, y)],
+    [isoX(x+w, y+h),   isoY(x+w, y+h)],
+    [isoX(x, y+h),     isoY(x, y+h)],
+  ]
+}
+
+function quadToPath(pts) {
+  return `M${pts.map(p => p.join(',')).join('L')}Z`
+}
+
+// Right side face (for 3D thickness)
+function isoRightFace(x, y, w, h, thickness) {
+  const t = thickness
+  return [
+    [isoX(x+w, y),   isoY(x+w, y)],
+    [isoX(x+w, y+h), isoY(x+w, y+h)],
+    [isoX(x+w, y+h), isoY(x+w, y+h) + t],
+    [isoX(x+w, y),   isoY(x+w, y) + t],
+  ]
+}
+
+// Front face (bottom edge)
+function isoFrontFace(x, y, w, h, thickness) {
+  const t = thickness
+  return [
+    [isoX(x, y+h),   isoY(x, y+h)],
+    [isoX(x+w, y+h), isoY(x+w, y+h)],
+    [isoX(x+w, y+h), isoY(x+w, y+h) + t],
+    [isoX(x, y+h),   isoY(x, y+h) + t],
+  ]
+}
+
+// Center of isometric quad
+function isoCenter(x, y, w, h) {
+  return [isoX(x + w/2, y + h/2), isoY(x + w/2, y + h/2)]
+}
+
+// ── Data loading ───────────────────────────────
+async function loadData() {
+  const [mRes, eRes] = await Promise.all([
+    fetch('/api/graph/modules').then(r => r.json()),
+    fetch('/api/graph/submodule-edges').then(r => r.json()).catch(() => ({edges:[]})),
+  ])
+  return { modules: mRes.modules || [], subModules: mRes.subModules || [], edges: eRes.edges || [] }
+}
+
+// ── Layout: one board per tier ─────────────────
+function layoutTiers(modules, subModules) {
+  // Assign tiers
+  modules.forEach(m => { m.tier = TIER_MAP[m.id] ?? 5 })
+
+  // Group by tier
+  const tierGroups = new Map()
+  modules.forEach(m => {
+    if (!tierGroups.has(m.tier)) tierGroups.set(m.tier, [])
+    tierGroups.get(m.tier).push(m)
+  })
+
+  // Sort modules within tier by fnCount desc
+  tierGroups.forEach(mods => mods.sort((a,b) => b.fnCount - a.fnCount))
+
+  const CHIP_GAP = 6
+  const CHIP_H = 32
+  const BOARD_PAD = 8   // tight padding around chips on board
+  const HEADER_H = 18   // space for module name
+  const MODULE_GAP = 60 // gap between module boards
+  const TIER_GAP = 50   // extra gap between tier rows (on top of LAYER_SPACING)
+
+  const tiers = Array.from(tierGroups.keys()).sort((a,b) => a - b)
+  const layers = []
+
+  tiers.forEach(tierIdx => {
+    const mods = tierGroups.get(tierIdx)
+    const palette = TIER_PALETTE[tierIdx] || TIER_PALETTE[5]
+
+    const moduleBlocks = mods.map(mod => {
+      const subs = subModules.filter(s => s.parentId === mod.id)
+        .sort((a,b) => (b.fnCount||0) - (a.fnCount||0))
+
+      if (subs.length === 0) {
+        return { mod, chips: [], rows: [], blockW: 100, blockH: 60 }
+      }
+
+      // Treemap: squarified layout fills the module board perfectly
+      // Global constant: pixels² per function — ensures a 40fn chip looks the
+      // same size regardless of which module it's in.
+      const PX_PER_FN = 45
+      const totalFn = subs.reduce((s,sub) => s + Math.max(sub.fnCount || 1, 3), 0)
+      const totalArea = totalFn * PX_PER_FN
+      const side = Math.sqrt(totalArea)
+      const blockW = Math.round(Math.max(80, side * 1.15))
+      const blockH = Math.round(Math.max(60, side / 1.15))
+
+      const root = d3.hierarchy({ children: subs.map(s => ({ ...s, value: Math.max(s.fnCount || 1, 3) })) })
+        .sum(d => d.value)
+        .sort((a, b) => b.value - a.value)
+
+      d3.treemap()
+        .size([blockW, blockH])
+        .paddingInner(2)
+        .paddingOuter(2)
+        .round(true)
+        (root)
+
+      const chips = root.leaves().map(leaf => ({
+        ...leaf.data,
+        chipW: leaf.x1 - leaf.x0,
+        chipH: leaf.y1 - leaf.y0,
+        lx: leaf.x0,
+        ly: leaf.y0,
+      }))
+
+      return { mod, chips, rows: [chips], blockW, blockH }
+    })
+
+    // ── Balanced placement: largest at center, spiral outward ──
+    // Sort by area descending
+    const sorted = [...moduleBlocks].sort((a,b) =>
+      (b.blockW * b.blockH) - (a.blockW * a.blockH)
+    )
+
+    // Place modules one by one. Each gets (mx, my) in flat coords.
+    // Strategy: place at the position closest to (0,0) that doesn't overlap.
+    const placed = [] // {mx, my, mw, mh}
+    const G = MODULE_GAP
+
+    function overlaps(x, y, w, h) {
+      for (const p of placed) {
+        if (x < p.mx + p.mw + G && x + w + G > p.mx &&
+            y < p.my + p.mh + G && y + h + G > p.my) return true
+      }
+      return false
+    }
+
+    // Current weighted centroid of placed blocks
+    function centroid() {
+      let tw = 0, sx = 0, sy = 0
+      for (const p of placed) {
+        const w = p.mw * p.mh
+        sx += w * (p.mx + p.mw / 2)
+        sy += w * (p.my + p.mh / 2)
+        tw += w
+      }
+      return tw > 0 ? { x: sx / tw, y: sy / tw } : { x: 0, y: 0 }
+    }
+
+    function bestPosition(w, h, blockArea) {
+      if (placed.length === 0) return { x: -w / 2, y: -h / 2 } // center first block on origin
+
+      const cur = centroid()
+      let bestX = 0, bestY = 0, bestScore = Infinity
+      const candidates = []
+
+      for (const p of placed) {
+        candidates.push({ x: p.mx + p.mw + G, y: p.my })
+        candidates.push({ x: p.mx, y: p.my + p.mh + G })
+        candidates.push({ x: p.mx + p.mw + G, y: p.my + p.mh - h })
+        candidates.push({ x: p.mx - w - G, y: p.my })
+        candidates.push({ x: p.mx - w - G, y: p.my + p.mh - h })
+        candidates.push({ x: p.mx, y: p.my - h - G })
+        candidates.push({ x: p.mx + (p.mw - w) / 2, y: p.my + p.mh + G })
+        candidates.push({ x: p.mx + (p.mw - w) / 2, y: p.my - h - G })
+      }
+
+      const totalW = placed.reduce((s, p) => s + p.mw * p.mh, 0)
+      for (const c of candidates) {
+        if (!overlaps(c.x, c.y, w, h)) {
+          // What would the centroid be if we placed here?
+          const newCx = (cur.x * totalW + blockArea * (c.x + w / 2)) / (totalW + blockArea)
+          const newCy = (cur.y * totalW + blockArea * (c.y + h / 2)) / (totalW + blockArea)
+          // Score: distance of new centroid from origin (want it near 0,0)
+          const torque = newCx * newCx + newCy * newCy
+          // Also penalize being far from cluster (compactness)
+          const dist = (c.x + w/2) * (c.x + w/2) + (c.y + h/2) * (c.y + h/2)
+          const score = torque * 3 + dist * 0.1 // heavily favor balance
+          if (score < bestScore) {
+            bestScore = score; bestX = c.x; bestY = c.y
+          }
+        }
+      }
+      return { x: bestX, y: bestY }
+    }
+
+    sorted.forEach(block => {
+      const area = block.blockW * block.blockH
+      const pos = bestPosition(block.blockW, block.blockH, area)
+      block._px = pos.x
+      block._py = pos.y
+      placed.push({ mx: pos.x, my: pos.y, mw: block.blockW, mh: block.blockH })
+    })
+
+    // Final shift: put weighted centroid at (0,0) then normalize to positive
+    let tw = 0, wcx = 0, wcy = 0
+    sorted.forEach(b => {
+      const w = b.blockW * b.blockH
+      wcx += w * (b._px + b.blockW / 2)
+      wcy += w * (b._py + b.blockH / 2)
+      tw += w
+    })
+    wcx /= tw; wcy /= tw
+    sorted.forEach(b => { b._px -= wcx; b._py -= wcy })
+    const minX = Math.min(...sorted.map(b => b._px))
+    const minY = Math.min(...sorted.map(b => b._py))
+    sorted.forEach(b => { b._px -= minX; b._py -= minY })
+
+    const boardW = Math.max(...sorted.map(b => b._px + b.blockW))
+    const boardH = Math.max(...sorted.map(b => b._py + b.blockH))
+    const modulePositions = []
+
+    sorted.forEach(block => {
+      block.chips.forEach(chip => {
+        chip.lx += block._px
+        chip.ly += block._py
+      })
+      modulePositions.push({
+        ...block,
+        mx: block._px, my: block._py,
+        mw: block.blockW, mh: block.blockH,
+      })
+    })
+
+    layers.push({
+      tierIdx, tierName: TIER_NAMES[tierIdx] || 'Other',
+      palette, modulePositions,
+      boardW, boardH,
+    })
+  })
+
+  // ── Center all tiers on a shared axis ──
+  const globalMaxW = Math.max(...layers.map(l => l.boardW))
+  layers.forEach(layer => {
+    const offsetX = (globalMaxW - layer.boardW) / 2
+    layer.modulePositions.forEach(mp => {
+      mp.mx += offsetX
+      mp.chips.forEach(c => { c.lx += offsetX })
+    })
+    layer.boardW = globalMaxW // align bounding for label positioning
+  })
+
+  return layers
+}
+
+// ── Render ─────────────────────────────────────
+function render(layers, allSubModules) {
+  const wrap = document.getElementById('canvasWrap')
+  const W = wrap.clientWidth, H = wrap.clientHeight
+  const svg = d3.select('#svg').attr('width', W).attr('height', H)
+  svg.selectAll('*').remove()
+  chipScreenPos = {} // reset chip positions
+
+  const defs = svg.append('defs')
+  // Shadow
+  const sh = defs.append('filter').attr('id','shadow')
+    .attr('x','-20%').attr('y','-10%').attr('width','150%').attr('height','150%')
+  sh.append('feDropShadow').attr('dx',0).attr('dy',4).attr('stdDeviation',8)
+    .attr('flood-color','rgba(0,0,0,0.4)')
+
+  const g = svg.append('g')
+  const zoom = d3.zoom().scaleExtent([0.1, 4])
+    .on('zoom', e => g.attr('transform', e.transform))
+  svg.call(zoom)
+
+  const LAYER_SPACING = 220  // vertical gap between tiers in screen space
+  const THICKNESS = 16       // 3D board thickness
+
+  // Draw layers bottom-up: tier 0 (Foundation) at the bottom
+  // In screen space: bottom = higher Y
+  const maxLayers = layers.length
+  const allGroups = []
+
+  layers.forEach((layer, li) => {
+    const screenYOffset = (maxLayers - 1 - li) * LAYER_SPACING
+    const pal = layer.palette
+
+    const layerG = g.append('g')
+      .attr('transform', `translate(0, ${screenYOffset})`)
+
+    // ── Tier label (left side) ──
+    const labelPt = isoCenter(-40, layer.boardH / 2, 0, 0)
+    layerG.append('text')
+      .attr('x', labelPt[0] - 100).attr('y', labelPt[1])
+      .attr('font-family', 'DM Sans, sans-serif')
+      .attr('font-size', 13).attr('font-weight', 700)
+      .attr('fill', pal.label).attr('opacity', 0.8)
+      .attr('text-anchor', 'end')
+      .text(layer.tierName.toUpperCase())
+
+    // Leader line
+    const firstMp = layer.modulePositions[0]
+    if (firstMp) {
+      const edge = [isoX(firstMp.mx, firstMp.my + firstMp.mh/2), isoY(firstMp.mx, firstMp.my + firstMp.mh/2)]
+      layerG.append('line')
+        .attr('x1', labelPt[0] - 95).attr('y1', labelPt[1])
+        .attr('x2', edge[0] - 6).attr('y2', edge[1])
+        .attr('stroke', pal.chip).attr('stroke-width', 0.5)
+        .attr('stroke-dasharray', '4,3').attr('opacity', 0.25)
+      layerG.append('circle')
+        .attr('cx', edge[0] - 6).attr('cy', edge[1])
+        .attr('r', 2).attr('fill', pal.chip).attr('opacity', 0.4)
+    }
+
+    // ── Each module = its own board ──
+    layer.modulePositions.forEach(mp => {
+      const modG = layerG.append('g').attr('class', 'module-board')
+        .attr('data-module', mp.mod.id).style('cursor', 'pointer')
+
+      // Board top
+      const topPts = isoQuad(mp.mx, mp.my, mp.mw, mp.mh)
+      modG.append('path').attr('d', quadToPath(topPts))
+        .attr('fill', pal.top)
+        .attr('stroke', pal.chip).attr('stroke-width', 0.5).attr('stroke-opacity', 0.25)
+        .attr('filter', 'url(#shadow)')
+      // Board front
+      modG.append('path').attr('d', quadToPath(isoFrontFace(mp.mx, mp.my, mp.mw, mp.mh, THICKNESS)))
+        .attr('fill', pal.front)
+      // Board right
+      modG.append('path').attr('d', quadToPath(isoRightFace(mp.mx, mp.my, mp.mw, mp.mh, THICKNESS)))
+        .attr('fill', pal.side)
+
+      // Module name — above the board
+      const namePt = isoCenter(mp.mx + mp.mw / 2, mp.my - 4, 0, 0)
+      modG.append('text')
+        .attr('x', namePt[0]).attr('y', namePt[1] - 10)
+        .attr('text-anchor', 'middle')
+        .attr('font-family', 'JetBrains Mono, monospace')
+        .attr('font-size', 9).attr('font-weight', 700)
+        .attr('fill', pal.label).attr('opacity', 0.7)
+        .text(mp.mod.name)
+      modG.append('text')
+        .attr('x', namePt[0]).attr('y', namePt[1])
+        .attr('text-anchor', 'middle')
+        .attr('font-family', 'JetBrains Mono, monospace')
+        .attr('font-size', 6).attr('fill', pal.chip).attr('opacity', 0.25)
+        .text(mp.mod.fnCount + ' fn')
+
+      // Chips (sub-modules) — flat on the board surface, no 3D extrusion
+      mp.chips.forEach(chip => {
+        const chipPts = isoQuad(chip.lx, chip.ly, chip.chipW, chip.chipH)
+        const chipSubId = chip.id || `${mp.mod.id}_${chip.name}`
+        const chipG = modG.append('g').attr('class', 'chip').attr('data-sub', chipSubId)
+
+        // Record screen position for scenario flow lines
+        const ctr = isoCenter(chip.lx, chip.ly, chip.chipW, chip.chipH)
+        chipScreenPos[chipSubId] = { x: ctr[0], y: ctr[1] + screenYOffset }
+
+        // Just the top face — sits flat on board
+        chipG.append('path').attr('d', quadToPath(chipPts))
+          .attr('fill', pal.chipBg)
+          .attr('stroke', pal.chip).attr('stroke-width', 0.5).attr('stroke-opacity', 0.3)
+
+        // Label
+        const minDim = Math.min(chip.chipW, chip.chipH)
+        if (minDim > 18) {
+          const ctr = isoCenter(chip.lx, chip.ly, chip.chipW, chip.chipH)
+          const maxChars = Math.floor(chip.chipW / 5.5)
+          const lbl = chip.name.length > maxChars ? chip.name.slice(0, maxChars - 1) + '..' : chip.name
+          const fontSize = minDim > 45 ? 7 : minDim > 28 ? 5.5 : 4.5
+          chipG.append('text')
+            .attr('x', ctr[0]).attr('y', ctr[1])
+            .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+            .attr('font-family', 'JetBrains Mono, monospace')
+            .attr('font-size', fontSize).attr('font-weight', 500)
+            .attr('fill', pal.text).attr('opacity', 0.8)
+            .text(lbl)
+        }
+
+        chipG
+          .on('mouseenter', (e) => {
+            chipG.select('path').attr('stroke-opacity', 0.9).attr('stroke-width', 1.2)
+              .attr('fill', pal.chipBg.replace('0.10', '0.22'))
+            showTooltip(e, chip.name, chip.description || '', `${chip.fnCount || 0} fns · ${mp.mod.name}`)
+          })
+          .on('mouseleave', () => {
+            chipG.select('path').attr('stroke-opacity', 0.3).attr('stroke-width', 0.5)
+              .attr('fill', pal.chipBg)
+            hideTooltip()
+          })
+      })
+
+      modG.on('click', () => openDetail(mp, pal, allSubModules))
+      modG.on('mouseenter', function() {
+        d3.select(this).select('path').attr('stroke-opacity', 0.6).attr('stroke-width', 1)
+      })
+      modG.on('mouseleave', function() {
+        d3.select(this).select('path').attr('stroke-opacity', 0.25).attr('stroke-width', 0.5)
+      })
+    })
+  })
+
+  // Apply scenario overlay (highlight + flow lines)
+  applyScenarioOverlay(layers)
+
+  // Fit to viewport
+  const bbox = g.node().getBBox()
+  const scale = Math.min(W / (bbox.width + 250), H / (bbox.height + 100)) * 0.8
+  const tx = (W - bbox.width * scale) / 2 - bbox.x * scale + 80
+  const ty = (H - bbox.height * scale) / 2 - bbox.y * scale
+  svg.call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale))
+}
+
+// ── Tooltip ────────────────────────────────────
+const tooltip = document.getElementById('tooltip')
+function showTooltip(e, title, desc, stat) {
+  document.getElementById('ttTitle').textContent = title
+  document.getElementById('ttDesc').textContent = desc
+  document.getElementById('ttStat').textContent = stat
+  tooltip.style.left = (e.clientX + 16) + 'px'
+  tooltip.style.top = (e.clientY - 10) + 'px'
+  tooltip.classList.add('show')
+}
+function hideTooltip() { tooltip.classList.remove('show') }
+
+// ── Detail Panel ───────────────────────────────
+function openDetail(mp, pal, allSubModules) {
+  const subs = allSubModules.filter(s => s.parentId === mp.mod.id)
+    .sort((a,b) => (b.fnCount||0) - (a.fnCount||0))
+
+  document.getElementById('detailContent').innerHTML = `
+    <div class="detail-title">${mp.mod.name}</div>
+    <div class="detail-desc">${mp.mod.description || ''}</div>
+    <div class="detail-stats">
+      <div><div class="detail-stat-val">${mp.mod.fnCount}</div><div class="detail-stat-label">Functions</div></div>
+      <div><div class="detail-stat-val">${subs.length}</div><div class="detail-stat-label">Sub-Modules</div></div>
+    </div>
+    <div class="sub-list-title">Sub-Modules</div>
+    ${subs.map(s => `
+      <div class="sub-item">
+        <div class="sub-item-dot" style="background:${pal.chip}"></div>
+        <div class="sub-item-name">${s.name}</div>
+        <div class="sub-item-count">${s.fnCount || 0} fn</div>
+      </div>
+    `).join('')}
+  `
+  document.getElementById('detailPanel').classList.add('open')
+}
+
+document.getElementById('detailClose').onclick = () =>
+  document.getElementById('detailPanel').classList.remove('open')
+
+// ── Rotation Drag ──────────────────────────────
+let cachedLayers = null, cachedSubs = null
+
+function setupRotation() {
+  const el = document.getElementById('canvasWrap')
+  let dragging = false, startX = 0, startY = 0, startRotZ = 0, startRotX = 0
+
+  el.addEventListener('mousedown', (e) => {
+    // Right-click or shift+click to rotate
+    if (e.button === 2 || e.shiftKey) {
+      e.preventDefault()
+      dragging = true
+      startX = e.clientX; startY = e.clientY
+      startRotZ = camRotZ; startRotX = camRotX
+      el.style.cursor = 'move'
+    }
+  })
+
+  window.addEventListener('mousemove', (e) => {
+    if (!dragging) return
+    const dx = e.clientX - startX
+    const dy = e.clientY - startY
+    camRotZ = startRotZ + dx * 0.005
+    camRotX = Math.max(0.05, Math.min(Math.PI / 2 - 0.05, startRotX + dy * 0.005))
+    if (cachedLayers) render(cachedLayers, cachedSubs)
+  })
+
+  window.addEventListener('mouseup', () => {
+    if (dragging) { dragging = false; el.style.cursor = 'grab' }
+  })
+
+  el.addEventListener('contextmenu', (e) => e.preventDefault())
+}
+
+// ── Scenario Highlighting ──────────────────────
+
+let activeScenario = null
+// Global lookup: subModuleId → {x, y} screen position (set during render)
+let chipScreenPos = {}
+
+async function loadScenarioEntries() {
+  try {
+    const res = await fetch('/api/scenarios/entries').then(r => r.json())
+    const sel = document.getElementById('scenarioSelect')
+    ;(res.entries || []).forEach(e => {
+      const opt = document.createElement('option')
+      opt.value = e.name
+      opt.textContent = `${e.name} (${e.module}, ${e.span} modules)`
+      sel.appendChild(opt)
+    })
+  } catch (err) { console.error(err) }
+}
+
+let activeStepIdx = -1 // which step is "current" in the panel
+
+async function activateScenario(entryName) {
+  if (!entryName) { clearScenario(); return }
+  // Use the guided endpoint with the entry name as the prompt — gets both trace + narrative
+  activateGuidedScenario(`Trace the execution flow of ${entryName}`)
+}
+
+function clearScenario() {
+  activeScenario = null
+  activeStepIdx = -1
+  document.getElementById('scenarioSelect').value = ''
+  document.getElementById('scenarioClear').style.display = 'none'
+  document.getElementById('stepPanel').classList.remove('open')
+  if (cachedLayers) render(cachedLayers, cachedSubs)
+}
+
+function buildStepPanel(scenario) {
+  const panel = document.getElementById('stepPanel')
+  const steps = scenario.steps || []
+  document.getElementById('stepTitle').textContent = scenario.entry
+  const totalSubs = new Set()
+  steps.forEach(s => { totalSubs.add(s.caller.subId); s.callees.forEach(c => totalSubs.add(c.subId)) })
+  document.getElementById('stepSub').textContent = `${totalSubs.size} sub-modules · ${scenario.flows.length} flows`
+
+  // Store for overlay
+  scenario._steps = steps
+
+  const list = document.getElementById('stepList')
+  list.innerHTML = ''
+
+  // Overview item
+  const allItem = document.createElement('div')
+  allItem.className = 'step-item active'
+  allItem.innerHTML = `
+    <div class="step-depth">OVERVIEW</div>
+    <div class="step-submod">All ${totalSubs.size} sub-modules</div>
+    <div class="step-mod">${scenario.flows.length} cross-module flows</div>
+  `
+  allItem.addEventListener('click', () => selectStep(-1))
+  list.appendChild(allItem)
+
+  steps.forEach((step, si) => {
+    if (si > 0) {
+      const arrow = document.createElement('div')
+      arrow.className = 'step-flow-arrow'
+      arrow.textContent = '↓'
+      list.appendChild(arrow)
+    }
+
+    const item = document.createElement('div')
+    item.className = 'step-item'
+    const callerFns = step.caller.functions || []
+
+    let html = `
+      <div class="step-depth">STEP ${si + 1}</div>
+      <div class="step-submod">${step.caller.subName}</div>
+      <div class="step-mod">${step.caller.modName}</div>
+      <div class="step-file">${callerFns.slice(0, 3).map(f => f.name).join(', ')}${callerFns.length > 3 ? ' +' + (callerFns.length - 3) : ''}</div>
+    `
+
+    if (step.callees.length > 0) {
+      html += `<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border-subtle)">`
+      html += `<div style="font-size:9px;color:var(--green);margin-bottom:4px">→ calls ${step.callees.length} sub-module${step.callees.length > 1 ? 's' : ''}:</div>`
+      step.callees.forEach(c => {
+        html += `<div style="font-size:10px;color:var(--text-secondary);margin-left:8px">• ${c.subName} <span style="color:var(--text-dim)">(${c.modName})</span></div>`
+      })
+      html += `</div>`
+    }
+
+    item.innerHTML = html
+    item.addEventListener('click', () => selectStep(si))
+    list.appendChild(item)
+  })
+
+  panel.classList.add('open')
+}
+
+function selectStep(idx) {
+  // idx = -1 means "overview" (show all), 0+ means depth group index
+  activeStepIdx = idx
+  document.querySelectorAll('.step-item').forEach((el, i) => {
+    // i=0 is the "All" item, i=1+ are depth groups
+    if (idx === -1) {
+      el.classList.toggle('active', i === 0)
+      el.classList.remove('visited')
+    } else {
+      el.classList.toggle('active', i === idx + 1)
+      el.classList.toggle('visited', i > 0 && i < idx + 1)
+      if (i === 0) { el.classList.remove('active'); el.classList.remove('visited') }
+    }
+  })
+  if (cachedLayers) render(cachedLayers, cachedSubs)
+}
+
+document.getElementById('scenarioSelect').addEventListener('change', (e) => activateScenario(e.target.value))
+document.getElementById('scenarioClear').addEventListener('click', clearScenario)
+
+// Guided scenario from prompt
+document.getElementById('scenarioGo').addEventListener('click', () => {
+  const prompt = document.getElementById('scenarioPrompt').value.trim()
+  if (prompt) activateGuidedScenario(prompt)
+})
+document.getElementById('scenarioPrompt').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const prompt = e.target.value.trim()
+    if (prompt) activateGuidedScenario(prompt)
+  }
+})
+
+async function activateGuidedScenario(prompt) {
+  // Show loading in step panel
+  const panel = document.getElementById('stepPanel')
+  document.getElementById('stepTitle').textContent = 'Analyzing...'
+  document.getElementById('stepSub').textContent = prompt
+  document.getElementById('stepList').innerHTML = '<div class="step-loading">Tracing scenario through graph + LLM...</div>'
+  panel.classList.add('open')
+  document.getElementById('scenarioClear').style.display = ''
+
+  try {
+    const res = await fetch('/api/scenarios/guided', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    }).then(r => r.json())
+
+    if (res.error) {
+      document.getElementById('stepList').innerHTML = `<div class="step-loading">Error: ${res.error}</div>`
+      return
+    }
+
+    activeScenario = res
+    activeStepIdx = -1
+    buildStepPanel(res)
+
+    // Append narrative doc below steps
+    if (res.narrative) {
+      const narDiv = document.createElement('div')
+      narDiv.className = 'step-narrative'
+      narDiv.innerHTML = res.narrative
+        .replace(/^### /gm, '<h3>').replace(/\n/g, '<br>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+      document.getElementById('stepList').appendChild(narDiv)
+    }
+
+    if (cachedLayers) render(cachedLayers, cachedSubs)
+  } catch (err) {
+    document.getElementById('stepList').innerHTML = `<div class="step-loading">Failed: ${err.message}</div>`
+  }
+}
+
+function applyScenarioOverlay(layers) {
+  if (!activeScenario) return
+
+  const steps = activeScenario._steps || activeScenario.steps || []
+  const involvedMods = new Set(activeScenario.involvedModules)
+  const involvedSubs = new Set(activeScenario.involvedSubModules)
+  const isOverview = activeStepIdx === -1
+
+  let currentSubs = new Set()
+  let currentMods = new Set()
+  let visitedSubs = new Set()
+
+  if (isOverview) {
+    currentSubs = involvedSubs
+    currentMods = involvedMods
+    visitedSubs = involvedSubs
+  } else {
+    // Visit caller + callees for steps up to current
+    for (let i = 0; i <= activeStepIdx && i < steps.length; i++) {
+      const step = steps[i]
+      visitedSubs.add(step.caller.subId)
+      step.callees.forEach(c => visitedSubs.add(c.subId))
+      if (i === activeStepIdx) {
+        currentSubs.add(step.caller.subId)
+        currentMods.add(step.caller.modId)
+        step.callees.forEach(c => { currentSubs.add(c.subId); currentMods.add(c.modId) })
+      }
+    }
+  }
+
+  // Dim/highlight modules and chips
+  d3.selectAll('.module-board').each(function() {
+    const el = d3.select(this)
+    const modId = el.attr('data-module')
+    if (!involvedMods.has(modId)) {
+      el.attr('opacity', 0.06)
+    } else {
+      el.attr('opacity', isOverview ? 0.9 : currentMods.has(modId) ? 1 : visitedSubs.size > 0 ? 0.4 : 0.9)
+      el.selectAll('.chip').each(function() {
+        const chipEl = d3.select(this)
+        const subId = chipEl.attr('data-sub')
+        if (currentSubs.has(subId)) {
+          chipEl.select('path')
+            .attr('stroke', '#4dff91').attr('stroke-opacity', isOverview ? 0.7 : 1).attr('stroke-width', isOverview ? 1.2 : 2)
+          chipEl.attr('opacity', 1)
+        } else if (visitedSubs.has(subId)) {
+          chipEl.select('path')
+            .attr('stroke', '#4dff91').attr('stroke-opacity', 0.35).attr('stroke-width', 0.8)
+          chipEl.attr('opacity', 0.6)
+        } else if (involvedSubs.has(subId)) {
+          chipEl.attr('opacity', 0.2)
+        } else {
+          chipEl.attr('opacity', 0.1)
+        }
+      })
+    }
+  })
+
+  // Flow lines
+  const g = d3.select('#svg g')
+  const flowG = g.append('g').attr('class', 'scenario-flows')
+
+  const showFlows = isOverview
+    ? (activeScenario.flows || [])
+    : (activeScenario.flows || []).filter(f => visitedSubs.has(f.fromSub) && visitedSubs.has(f.toSub))
+
+  showFlows.forEach(flow => {
+    const from = chipScreenPos[flow.fromSub]
+    const to = chipScreenPos[flow.toSub]
+    if (!from || !to) return
+
+    const dx = to.x - from.x, dy = to.y - from.y
+    const dist = Math.sqrt(dx*dx + dy*dy)
+    if (dist < 5) return
+    const bow = Math.min(dist * 0.25, 50)
+    const midX = (from.x + to.x) / 2 - bow * 0.3
+    const midY = (from.y + to.y) / 2 - bow
+    const w = Math.min(flow.weight || 1, 8)
+
+    const isCurrent = !isOverview && (currentSubs.has(flow.fromSub) || currentSubs.has(flow.toSub))
+
+    flowG.append('path')
+      .attr('d', `M${from.x},${from.y} Q${midX},${midY} ${to.x},${to.y}`)
+      .attr('fill', 'none')
+      .attr('stroke', '#4dff91')
+      .attr('stroke-width', isCurrent ? 1.5 + w * 0.3 : isOverview ? 0.8 + w * 0.2 : 0.5)
+      .attr('stroke-opacity', isCurrent ? 0.7 : isOverview ? 0.45 : 0.2)
+      .attr('stroke-dasharray', '6,4')
+      .attr('class', (isCurrent || isOverview) ? 'flow-line' : '')
+
+    flowG.append('circle')
+      .attr('cx', to.x).attr('cy', to.y)
+      .attr('r', isCurrent ? 3 : isOverview ? 2 : 1.5)
+      .attr('fill', '#4dff91').attr('opacity', isCurrent ? 0.8 : isOverview ? 0.5 : 0.2)
+  })
+}
+
+// ── Init ───────────────────────────────────────
+async function init() {
+  try {
+    const data = await loadData()
+    if (!data.modules.length) return
+
+    cachedLayers = layoutTiers(data.modules, data.subModules)
+    cachedSubs = data.subModules
+    render(cachedLayers, cachedSubs)
+    setupRotation()
+    loadScenarioEntries()
+
+    let timer
+    window.addEventListener('resize', () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => render(cachedLayers, cachedSubs), 200)
+    })
+  } catch (err) {
+    console.error(err)
+  }
+}
+init()
+</script>
+</body>
+</html>
