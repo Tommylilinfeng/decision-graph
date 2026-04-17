@@ -1,8 +1,8 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import assert from 'node:assert/strict'
-import { resolveImport } from './src/resolve-imports'
-import { resolveCall, buildRegistry, ResolverImport, Registry } from './src/resolve'
+import { resolveImport } from '../src/resolve-imports'
+import { resolveCall, buildRegistry, ResolverImport, Registry } from '../src/resolve'
 
 const ROOT = '/tmp/ctx-resolve-test'
 
@@ -142,7 +142,7 @@ const baseRegistry: Registry = buildRegistry([
   assert.deepEqual(r, { unresolved: 'external' })
 }
 
-// 14. Barrel re-export classified as barrel_miss (v1 blind-spot pin)
+// 14. Barrel re-export classified as barrel_miss (known blind-spot pin)
 {
   const reg = buildRegistry([
     { id: 3, file: 'src/app.ts', name: 'createOrder' },

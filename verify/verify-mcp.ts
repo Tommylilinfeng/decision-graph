@@ -1,15 +1,15 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import assert from 'node:assert/strict'
-import { openDatabase, closeDatabase, upsertNodes } from './src/storage'
-import { decisionsForFunction, createDecision } from './src/decisions'
+import { openDatabase, closeDatabase, upsertNodes } from '../src/storage'
+import { decisionsForFunction, createDecision } from '../src/decisions'
 import {
   handleRecordDecisions,
   handleResetDecisionCache,
   handleDecisionsByKeyword,
-} from './src/mcp'
-import { buildDescription } from './src/description'
-import { sessionStatePath, writeShown, readShown } from './src/session'
+} from '../src/mcp'
+import { buildDescription } from '../src/description'
+import { sessionStatePath, writeShown, readShown } from '../src/session'
 
 const DB_PATH = '/tmp/ctx-verify-mcp.db'
 

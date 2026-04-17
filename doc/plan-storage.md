@@ -54,7 +54,7 @@ Layout in this order:
     ORDER BY (end_line - start_line) ASC
     LIMIT 1
     ```
-    `ORDER BY` picks the innermost match (shortest range) when nested functions exist. In v1 there is no nesting, but the clause costs nothing and is verified.
+    `ORDER BY` picks the innermost match (shortest range) when nested functions exist. There is no nesting today, but the clause costs nothing and is verified.
 12. `edgesFromNode(db, source_id)` — returns `Edge[]`.
 13. `edgesToNode(db, target_id)` — returns `Edge[]`.
 

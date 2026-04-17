@@ -8,7 +8,7 @@ Pipeline glues the three layers by the fixed 13-step flow described below. CLI i
 
 ## Decisions locked in
 
-1. **Full rebuild per run.** `DELETE FROM nodes` inside a single transaction, then re-insert. Edges cascade-clear. Simple, idempotent, no orphan logic. The `UNIQUE(file, name)` identity scheme in storage was designed for incremental but v1 pipeline does not use it — incremental ships with `file_hashes` in a later version. The identity guarantee is proven by `verify.ts` scenario 2, not by pipeline.
+1. **Full rebuild per run.** `DELETE FROM nodes` inside a single transaction, then re-insert. Edges cascade-clear. Simple, idempotent, no orphan logic. The `UNIQUE(file, name)` identity scheme in storage was designed for incremental but pipeline does not use it — incremental ships with `file_hashes` in a later version. The identity guarantee is proven by `verify.ts` scenario 2, not by pipeline.
 2. **Hardcoded exclusion list.** No `--include` / `--exclude` flags:
    ```
    node_modules/**, dist/**, build/**, out/**, .git/**, .ctx/**
@@ -18,7 +18,7 @@ Pipeline glues the three layers by the fixed 13-step flow described below. CLI i
    *.config.ts, *.config.tsx, *.config.js, *.config.mjs, *.config.cjs
    *.d.ts, *.min.js, *.bundle.js
    ```
-   Test files are v1 skip. Not "tests don't matter" — "we don't know yet what MCP wants from them, and adding later is easier than removing." Documented.
+   Test files are skipped. Not "tests don't matter" — "we don't know yet what MCP wants from them, and adding later is easier than removing." Documented.
 3. **Single-file exceptions are caught + skipped + counted.** The summary shows the count and the first three filenames (the `3` is a display choice carried from the earlier discussion; no other constants are hardcoded). Note: `extract.ts` already tolerates syntax errors (returns empty results), so this `try/catch` mainly catches rare runtime errors (fs failures, WASM crashes). Belt and suspenders.
 4. **No progress stream.** Silent while running, single summary block at end. If someone later complains "it looks frozen", the cheap upgrade is one `.` per file; we are not there.
 5. **No concurrency.** Single-threaded. `better-sqlite3` is sync; `extract` is CPU-bound but adding worker threads means per-worker WASM load + AST serialization — complexity burns more than it saves on sub-minute index runs.
@@ -133,7 +133,7 @@ $ context-chain stats [--path <path>]
      345 calls → 96 resolved (28%), 249 unresolved
      2 parse failures: src/legacy.ts, src/gen/schema.ts
    ```
-   Numbers above are from a real dogfood run on this project — not a target. A typical TS repo sits around 25–35% resolved because v1 explicitly does not resolve member chains, default imports, namespace imports, or external calls. See "Failure signals" below. Last line only shown if `parseFailures.length > 0`. First three filenames, comma-joined. If calls total is 0, skip the percentage to avoid divide-by-zero.
+   Numbers above are from a real dogfood run on this project — not a target. A typical TS repo sits around 25–35% resolved because explicitly does not resolve member chains, default imports, namespace imports, or external calls. See "Failure signals" below. Last line only shown if `parseFailures.length > 0`. First three filenames, comma-joined. If calls total is 0, skip the percentage to avoid divide-by-zero.
 
 ### `stats [--path <path>]`
 
@@ -204,12 +204,12 @@ node dist/cli.js stats
 - Any scenario fails: fix the code, never the assertion.
 - Summary crashes with `NaN%` on zero-call repo: add the divide-by-zero guard.
 
-No percentage thresholds for resolved rate. Most `unresolved` calls in real code are member chains (`console.log`, `arr.map`, `user.save`) and external imports — v1 scope explicitly does not resolve them, so they are expected, not a bug. Staring at the raw numbers is fine; chasing a target percentage would push us to change resolver strategies, which we decided in the resolve plan we will not do without data.
+No percentage thresholds for resolved rate. Most `unresolved` calls in real code are member chains (`console.log`, `arr.map`, `user.save`) and external imports — scope explicitly does not resolve them, so they are expected, not a bug. Staring at the raw numbers is fine; chasing a target percentage would push us to change resolver strategies, which we decided in the resolve plan we will not do without data.
 
 ## Deliberately not doing
 
 - No watch mode (`--watch`, file system events).
-- No incremental (`file_hashes` + change detection). v1 is always full rebuild.
+- No incremental (`file_hashes` + change detection). always full rebuild.
 - No `--include` / `--exclude` flags. Exclusion list is compiled into the binary.
 - No progress output during run.
 - No parallel / worker-thread extraction.

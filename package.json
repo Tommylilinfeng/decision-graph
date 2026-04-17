@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc",
     "prepare": "tsc",
-    "verify": "tsc && node dist/verify.js && node dist/verify-extract.js && node dist/verify-resolve.js && node dist/verify-pipeline.js && node dist/verify-decisions.js && node dist/verify-mcp.js && node dist/verify-inject.js"
+    "verify": "tsc && node dist/verify/verify.js && node dist/verify/verify-extract.js && node dist/verify/verify-resolve.js && node dist/verify/verify-pipeline.js && node dist/verify/verify-decisions.js && node dist/verify/verify-mcp.js && node dist/verify/verify-inject.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

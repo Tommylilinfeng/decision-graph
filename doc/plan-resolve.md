@@ -15,14 +15,14 @@ No separate `doc/resolve.md` — the plan is the spec.
 
    | bucket | condition | meaning |
    |---|---|---|
-   | `member_chain` | callee contains `.` | v1 scope skip (no type info) |
+   | `member_chain` | callee contains `.` | not supported (no type info) |
    | `external` | import matched, `resolved_file === null` | outside project, unresolvable by definition |
-   | `namespace_import` | import matched, `is_namespace` | v1 scope skip |
-   | `default_import` | import matched, `is_default`, internal | v1 scope skip (external defaults already classified as `external`) |
-   | `barrel_miss` | import resolved but registry missed | known v1 blind spot |
+   | `namespace_import` | import matched, `is_namespace` | not supported |
+   | `default_import` | import matched, `is_default`, internal | not supported (external defaults already classified as `external`) |
+   | `barrel_miss` | import resolved but registry missed | known known blind spot |
    | `unknown_bare` | no import match, same-file miss | usually JS built-ins or chain-break residue; project-name hits are real bugs |
 
-   Judgment order (first match wins): `member_chain` → import match → (`external` → `namespace_import` → `default_import` → registry hit / `barrel_miss`) → (registry hit / `unknown_bare`). The `external` check precedes `is_default` / `is_namespace` on purpose: a default import resolving to `null` is indistinguishable from any other external call, and calling it `default_import` would falsely imply "v1 would cover this once we implement default resolution".
+   Judgment order (first match wins): `member_chain` → import match → (`external` → `namespace_import` → `default_import` → registry hit / `barrel_miss`) → (registry hit / `unknown_bare`). The `external` check precedes `is_default` / `is_namespace` on purpose: a default import resolving to `null` is indistinguishable from any other external call, and calling it `default_import` would falsely imply "this would be covered once we implement default resolution".
 
    **Why classification exists: the 28%-vs-97% reading problem.**
 
@@ -30,7 +30,7 @@ No separate `doc/resolve.md` — the plan is the spec.
 
    - calls that **could in principle** hit project-internal code (named bare identifiers)
    - calls to **external infrastructure** (Node APIs, npm packages, JS built-ins)
-   - **member chains** and **chain-break residue** that v1 explicitly excludes
+   - **member chains** and **chain-break residue** that explicitly excludes
 
    Strip the second and third from the denominator — i.e., look only at calls that could plausibly refer to a project-internal function — and the hit rate on this project is **~97%**. The 69-point gap between 28% and 97% is entirely noise, not tool failure.
 
@@ -38,19 +38,19 @@ No separate `doc/resolve.md` — the plan is the spec.
 
    - `member_chain` large → expected in any TS codebase using Node APIs or OO patterns. Not a signal.
    - `external` > 0 → project depends on npm packages. Not a signal.
-   - `barrel_miss` growing across runs → project uses barrel re-exports heavily; reconsider v1 scope for that codebase.
-   - `namespace_import` / internal `default_import` > 0 → project has patterns v1 skipped; data for prioritizing v1.x.
+   - `barrel_miss` growing across runs → project uses barrel re-exports heavily; reconsider scope for that codebase.
+   - `namespace_import` / internal `default_import` > 0 → project has patterns skipped; data for prioritizing future work.
    - `unknown_bare` containing recognizably-project names (not `Error`, `setTimeout`, `get`, `map`) → **real bug**. The registry missed something it should have found. Investigate.
 
    The top-line percentage stays in the summary for continuity, but the buckets are what you actually read.
 3. **Import resolver returns a discriminated union.** `{ kind: 'resolved'; path: string } | { kind: 'external' }`. No sentinel strings, no nullable overloading.
 4. **Registry is `Map<string, number>` keyed by `"${file}::${name}"`.** Double-key O(1) lookup. No `Map<name, Array<candidate>>` — that shape only exists to serve strategies 3/4, which are cut.
-5. **Barrel re-exports are a known blind spot.** `export { foo } from './foo'` in an `index.ts` means the resolver sees `./utils` → `src/utils/index.ts`, registry has no `foo` in that file, strategy 1 misses. Not a bug, not v1 scope. `verify-resolve.ts` has a scenario that **asserts the miss** so the blind spot is pinned in tests and won't silently "appear to work" later.
+5. **Barrel re-exports are a known blind spot.** `export { foo } from './foo'` in an `index.ts` means the resolver sees `./utils` → `src/utils/index.ts`, registry has no `foo` in that file, strategy 1 misses. Not a bug, not scope. `verify-resolve.ts` has a scenario that **asserts the miss** so the blind spot is pinned in tests and won't silently "appear to work" later.
 
 Additional scope decisions flowing from (1):
 
-- **Only bare-identifier callees resolve.** If `callee` contains `.`, return `null` immediately. `obj.method()`, `utils.foo()`, `a.b.c()` are all unresolved in v1. Method dispatch needs type info we don't have; namespace imports are uncommon enough to skip.
-- **Only named imports count for strategy 1.** Default imports (`import X from './a'`) and namespace imports (`import * as X from './a'`) do not participate. Again: a well-defined v1 surface is worth more than trying to cover every shape.
+- **Only bare-identifier callees resolve.** If `callee` contains `.`, return `null` immediately. `obj.method()`, `utils.foo()`, `a.b.c()` are all unresolved. Method dispatch needs type info we don't have; namespace imports are uncommon enough to skip.
+- **Only named imports count for strategy 1.** Default imports (`import X from './a'`) and namespace imports (`import * as X from './a'`) do not participate. Again: a well-defined surface is worth more than trying to cover every shape.
 
 ## Files
 
@@ -118,16 +118,16 @@ export function resolveCall(
 
 Call resolution logic (strategy 1 then 2, stop at first hit):
 
-1. If `callee.includes('.')`: return `null` (member chains not resolved in v1).
+1. If `callee.includes('.')`: return `null` (member chains not resolved).
 2. Strategy 1 (import_map): find `imp` in `callerImports` where `imp.local_name === callee`.
    - If **any** import matches `local_name`, the programmer's intent is that import. Whether or not we can resolve the target, we do **not** fall through — falling through would silently re-attribute the call to an unrelated same-file function that happens to share the name.
-   - If `imp.is_namespace`: return `null` (v1 does not resolve namespace dispatch).
-   - If `imp.is_default`: return `null` (v1 does not resolve default imports).
+   - If `imp.is_namespace`: return `null` (does not resolve namespace dispatch).
+   - If `imp.is_default`: return `null` (does not resolve default imports).
    - If `imp.resolved_file === null`: return `null` (external target).
    - Else: return `registry.get(\`${imp.resolved_file}::${imp.imported_name}\`) ?? null`. A miss here is the barrel re-export case — return `null`, do not fall through.
 3. Strategy 2 (same_module): reached only when **no import at all** matches `local_name`. Return `registry.get(\`${callerFile}::${callee}\`) ?? null`.
 
-Rationale: any import that matches the callee name is structural evidence that the programmer meant that import. Our inability to resolve a specific case (namespace, default, external, barrel) does not downgrade that evidence — it just means v1 returns `null` for this call. Falling through to same-module would attribute the call to a collision victim, which is exactly the silent misreport we are designed to avoid.
+Rationale: any import that matches the callee name is structural evidence that the programmer meant that import. Our inability to resolve a specific case (namespace, default, external, barrel) does not downgrade that evidence — it just means returns `null` for this call. Falling through to same-module would attribute the call to a collision victim, which is exactly the silent misreport we are designed to avoid.
 
 ## `verify-resolve.ts` — scenarios
 
@@ -180,8 +180,8 @@ Registry for tests 6–14 built from three logical files:
 14. **Barrel re-export is unresolved (the blind-spot pin)**:
     - callee `'foo'`, callerFile `'src/app.ts'`
     - imports `[{ local_name: 'foo', imported_name: 'foo', is_default: false, is_namespace: false, resolved_file: 'src/utils/index.ts' }]`
-    - Registry has no `src/utils/index.ts::foo` (the barrel re-exports from elsewhere, which v1 doesn't track)
-    - → `null`. Assertion: strictly `null`, with a comment that this is the known v1 blind spot.
+    - Registry has no `src/utils/index.ts::foo` (the barrel re-exports from elsewhere, which doesn't track)
+    - → `null`. Assertion: strictly `null`, with a comment that this is the known known blind spot.
 
 Runs as `node dist/verify-resolve.js`, prints `OK` or throws.
 
@@ -213,7 +213,7 @@ Runs as `node dist/verify-resolve.js`, prints `OK` or throws.
 - Member-chain resolution (`obj.method`).
 - Any heuristic that guesses without structural evidence.
 - Confidence scores, strategy names in edge properties, or any rank metadata on edges.
-- `.js → .ts` fallback (Node-ESM-TypeScript interop where `import './foo.js'` should resolve to `foo.ts`). v1 treats `./foo.js` as external if the literal `.js` file is missing. Users relying on this pattern will see a lot of `external`. Documented, not supported.
+- `.js → .ts` fallback (Node-ESM-TypeScript interop where `import './foo.js'` should resolve to `foo.ts`). treats `./foo.js` as external if the literal `.js` file is missing. Users relying on this pattern will see a lot of `external`. Documented, not supported.
 
 ## Verification
 

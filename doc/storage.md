@@ -107,7 +107,7 @@ Alternatives rejected:
 
 ### `kind IN ('function')` today
 
-Methods, classes, and interfaces are not in v1. A decision hook in v1 attaches to a function edit, which is a function. When we need to anchor a decision to a class or interface, we add the value to the `CHECK` clause.
+Methods, classes, and interfaces are not supported. A decision hook attaches to a function edit, which is a function. When we need to anchor a decision to a class or interface, we add the value to the `CHECK` clause.
 
 Same reasoning for edges: only `calls` today. `imports` and `contains` arrive when there is a query that needs them.
 
@@ -207,7 +207,7 @@ interface Edge extends EdgeInput {
 
 ### Why `upsertNodes` instead of `insertNodes`
 
-A v1 full rebuild deletes the database and inserts from scratch — no conflicts. A v2 incremental rebuild will re-run extraction on a changed file and needs to update existing rows. `upsertNodes` handles both with one API:
+A full rebuild deletes the database and inserts from scratch — no conflicts. An incremental rebuild (future) will re-run extraction on a changed file and needs to update existing rows. `upsertNodes` handles both with one API:
 
 ```sql
 INSERT INTO nodes (...) VALUES (...)
@@ -229,7 +229,7 @@ ORDER BY (end_line - start_line) ASC
 LIMIT 1
 ```
 
-The `ORDER BY` handles future nested functions (innermost wins). In v1 there is no nesting, but the clause costs nothing.
+The `ORDER BY` handles future nested functions (innermost wins). There is no nesting today, but the clause costs nothing.
 
 ### Why `insertEdges` increments `count` on conflict
 
@@ -244,7 +244,7 @@ The earlier `INSERT OR IGNORE` design folded duplicates silently. Dogfood on thi
 
 The API still exposes `insertEdges`, not `upsertEdges`. The name reflects the caller's action (inserting one row per observed call site); `count` is a storage-layer detail that accumulates underneath. Callers of `edgesFromNode` / `edgesToNode` receive the count column in each `Edge` row and can ignore it when they only need relationship existence.
 
-One caveat, documented separately: under incremental re-indexing, raw `count + 1` over-accumulates when a re-indexed source file has fewer call sites than before. v1 is full-rebuild (every run starts from `DELETE FROM nodes`, which CASCADE-clears edges), so the issue does not fire today. See `doc/known-issues/incremental-edge-count.md` for the protocol that incremental must implement.
+One caveat, documented separately: under incremental re-indexing, raw `count + 1` over-accumulates when a re-indexed source file has fewer call sites than before. full-rebuild (every run starts from `DELETE FROM nodes`, which CASCADE-clears edges), so the issue does not fire today. See `doc/known-issues/incremental-edge-count.md` for the protocol that incremental must implement.
 
 ### Why batch-only
 
@@ -328,7 +328,7 @@ The pipeline runs `DELETE FROM nodes` on every full rebuild (`doc/plan-pipeline.
 
 ### Why no `stale` column
 
-The status "this decision's anchor no longer exists" is computed at query time via an `EXISTS` subquery against `nodes`. Persisting a `stale` column would require trigger-or-hook machinery to keep it in sync with the nodes table, and v1 has no reader for a persistent staleness flag. The inline EXISTS is cheap enough at this table size.
+The status "this decision's anchor no longer exists" is computed at query time via an `EXISTS` subquery against `nodes`. Persisting a `stale` column would require trigger-or-hook machinery to keep it in sync with the nodes table, and no reader for a persistent staleness flag. The inline EXISTS is cheap enough at this table size.
 
 If later we need a user-settable "this decision is archived, stop showing it" flag, that is a different concept and gets a differently-named column (`archived`, maybe) added when data demands it.
 
@@ -340,10 +340,10 @@ The index `(anchor_file, anchor_name)` serves both:
 - Function-level queries filter by `anchor_file = ? AND anchor_name = ?` — a full index hit.
 - File-level queries filter by `anchor_file = ? AND anchor_kind = 'file'` — leading-column hit plus residual kind filter.
 
-### What is *not* in v1
+### What is *not* supported
 
-- **No standalone "only-file-anchors" retrieval.** `decisionsForFunction(file, name)` already returns file-level decisions for the file along with function-level ones on `(file, name)`. A separate `fileLevelDecisionsFor(file)` has no v1 consumer — any use case that needs it is covered by the function-level aggregation. The name is reclaimable later if a real use appears (e.g., an admin tool listing all file-scoped commitments).
-- **No `decisionsForFile(file)` aggregation.** A query that returns "every function-level decision for any function in this file, plus the file-level ones" is a C3 graph-aware query shape. The dominant v1 query is "editing a specific function" — that's what `decisionsForFunction` serves.
+- **No standalone "only-file-anchors" retrieval.** `decisionsForFunction(file, name)` already returns file-level decisions for the file along with function-level ones on `(file, name)`. A separate `fileLevelDecisionsFor(file)` has no consumer — any use case that needs it is covered by the function-level aggregation. The name is reclaimable later if a real use appears (e.g., an admin tool listing all file-scoped commitments).
+- **No `decisionsForFile(file)` aggregation.** A query that returns "every function-level decision for any function in this file, plus the file-level ones" is a C3 graph-aware query shape. The dominant query is "editing a specific function" — that's what `decisionsForFunction` serves.
 - **No directory anchor kind.** Patterns like "all files in `src/auth/`" are expressed by listing the files as separate anchors. Directory anchors add prefix-matching complexity and are speculative until real decisions accumulate enough file-anchor fan-out to justify the glob step.
 - **No project anchor kind.** Architecture-level rules ("we don't use Redux") live in `CLAUDE.md` or `README.md` until data shows queryable project scope is needed. Decisions must anchor to at least one function or file.
 - **No decision relationships** (`caused_by`, `supersedes`, `conflicts_with`). Decisions accumulate as a flat set. See `CLAUDE.md` for the explicit out-of-scope list.
@@ -397,14 +397,14 @@ Discriminated union on `AnchorInput` and `Anchor` means callers write `if (a.kin
 
 Separating creation from linking was the earlier design. It meant callers had to remember to call both, and forgetting the second produced an orphan decision that could never be found by any query (no `decision_anchors` row to join through). The invariant "a decision has ≥1 anchor" only matters if the API enforces it. A two-call design pushes enforcement onto every caller and every future hook implementer.
 
-One call, required non-empty array, everything in one transaction. The "pre-existing decision, add another anchor later" use case does not exist in v1 and can be carved out if real use appears twice (CLAUDE.md's abstraction threshold).
+One call, required non-empty array, everything in one transaction. The "pre-existing decision, add another anchor later" use case does not exist and can be carved out if real use appears twice (CLAUDE.md's abstraction threshold).
 
 ## Known limitations
 
 - **Single writer.** Insert functions are not safe to call from multiple processes at once. The indexer is one-shot.
-- **No incremental re-indexing in v1.** Every `index` run rebuilds from scratch. For repos under ~10k files this is seconds.
+- **No incremental re-indexing.** Every `index` run rebuilds from scratch. For repos under ~10k files this is seconds.
 - **Reverse-dependency re-resolution not implemented.** When incremental lands, deleting a function requires re-processing files that referenced it. Not written yet.
-- **v1 stores only functions.** Classes, methods, and interfaces are not in the schema.
+- **stores only functions.** Classes, methods, and interfaces are not in the schema.
 - **Root derivation depends on convention.** `openDatabase` accepts any path. If the database is not at `<root>/.ctx/graph.db`, consumers that derive the root will get the wrong directory.
 
 ## When the schema changes

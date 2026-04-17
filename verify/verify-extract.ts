@@ -5,7 +5,7 @@ import {
   Language,
   ExtractedFunction,
   ExtractedImport,
-} from './src/extract'
+} from '../src/extract'
 
 function oneFn(src: string, lang: Language = 'typescript'): ExtractedFunction {
   const r = extractFromFile(src, lang)

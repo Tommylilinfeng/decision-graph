@@ -16,7 +16,7 @@ That is the whole job. One `(source, language)` input, one plain-object output.
 - Resolve calls to definitions (`resolve/` does that against the node registry).
 - Filter built-in names (`console.log`, `Array.map`, etc. — caller decides).
 - Deduplicate calls (storage's `INSERT OR IGNORE` on edges handles that).
-- Process classes, methods, interfaces, type aliases, enums (v1 scope is functions).
+- Process classes, methods, interfaces, type aliases, enums (scope is functions).
 - Process nested functions (see the nested-function decision below).
 - Log parse errors (returns whatever partial tree it gets; logging is the pipeline's call).
 
@@ -104,7 +104,7 @@ Each `import_statement` contributes one `ExtractedImport` per imported binding:
 - `import * as x from './a'` → one import with `imported_name: '*'`, `is_namespace: true`.
 - `import x, { y } from './a'` → default + named, two imports.
 
-CommonJS `require()` is not extracted in v1. Real TS projects are ESM. If we hit a CJS file, those calls become bare `require` entries in `calls`, which resolvers will fail to resolve. That is fine.
+CommonJS `require()` is not extracted. Real TS projects are ESM. If we hit a CJS file, those calls become bare `require` entries in `calls`, which resolvers will fail to resolve. That is fine.
 
 ### Line numbers are 1-indexed, closed interval
 
@@ -120,7 +120,7 @@ Rationale: editors, `grep -n`, Claude's line citations, and the eventual decisio
 const config = loadConfig()  // top level, no enclosing function
 ```
 
-This `loadConfig` call has no `ExtractedFunction` to live inside. v1 drops it. Reasoning: the decision hook anchors to a function; a top-level statement is not a function to anchor to. If we later want "module-initialization" semantics, we add a virtual module node in the pipeline.
+This `loadConfig` call has no `ExtractedFunction` to live inside. drops it. Reasoning: the decision hook anchors to a function; a top-level statement is not a function to anchor to. If we later want "module-initialization" semantics, we add a virtual module node in the pipeline.
 
 ### Parse failures are silent
 
@@ -137,9 +137,9 @@ Storage enforces uniqueness at the edge level via `PRIMARY KEY (source_id, targe
 
 ## Known limitations
 
-- **No CommonJS `require`.** v1 is ESM-only.
+- **No CommonJS `require`.** ESM-only.
 - **No dynamic imports.** `import('./x')` is not extracted.
-- **No classes, methods, interfaces, type aliases, enums.** v1 is functions only.
+- **No classes, methods, interfaces, type aliases, enums.** functions only.
 - **No nested named functions.** `function inner() {}` declared inside another function is not extracted as a standalone node; its calls are dropped, not attributed to the outer scope. Anonymous lambdas are handled differently — see the nested-functions decision above.
 - **No top-level calls.** Calls outside any function are dropped.
 - **No JSX-specific extraction.** We parse TSX so we do not fail, but we do not treat JSX elements as anything special — only the JS/TS expressions inside curlies produce calls.

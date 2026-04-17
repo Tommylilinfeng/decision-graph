@@ -1,6 +1,6 @@
 # MCP Server
 
-Exposes one tool — `record_decisions` — over the Model Context Protocol so Claude Code can write decisions into the project's code graph. Each call records one or more decisions in an atomic batch. Write-only in v1; reads go through SQLite directly or await a later layer.
+Exposes one tool — `record_decisions` — over the Model Context Protocol so Claude Code can write decisions into the project's code graph. Each call records one or more decisions in an atomic batch. Write-only; reads go through SQLite directly or await a later layer.
 
 ## Prerequisite
 
@@ -90,7 +90,7 @@ Input schema (JSON):
 
 - `decisions` must have at least one entry; no upper bound
 - Each decision: `decision` (required, one terse sentence), `keywords` (non-empty array), `anchors` (non-empty array)
-- Each keyword: lowercase ASCII, starts with letter, ends with letter/digit, `[a-z0-9-]` in between, length 2-40 (regex `^[a-z][a-z0-9-]{0,38}[a-z0-9]$`). Examples: `retry`, `v1-fallback`, `billing-flow`. Rejected: `Retry`, `重试`, `retry!`, `a`, `abc-`. Duplicates within a single decision are rejected.
+- Each keyword: lowercase ASCII, starts with letter, ends with letter/digit, `[a-z0-9-]` in between, length 2-40 (regex `^[a-z][a-z0-9-]{0,38}[a-z0-9]$`). Examples: `retry`, `legacy-fallback`, `billing-flow`. Rejected: `Retry`, `重试`, `retry!`, `a`, `abc-`. Duplicates within a single decision are rejected.
 - Each anchor has `kind` of either `'function'` or `'file'`
 - `kind: 'function'` requires a `name`
 - `kind: 'file'` must NOT include a `name` field
@@ -144,7 +144,7 @@ The distinction matters because Claude recovers gracefully from the first (retry
 
 ## Session ID
 
-If the environment variable `CONTEXT_CHAIN_SESSION_ID` is set when the server starts, decisions recorded by that instance will carry its value in the `session_id` column. There is no v1 reader for this field — it's stored for future tooling (session-level rollback, audit, grouping). Claude Code does not currently inject a session identifier into MCP subprocess env; when it does, switch to whatever variable name ships and update this doc.
+If the environment variable `CONTEXT_CHAIN_SESSION_ID` is set when the server starts, decisions recorded by that instance will carry its value in the `session_id` column. There is no reader for this field — it's stored for future tooling (session-level rollback, audit, grouping). Claude Code does not currently inject a session identifier into MCP subprocess env; when it does, switch to whatever variable name ships and update this doc.
 
 ## What this server deliberately does not do
 

@@ -51,7 +51,7 @@ This document is the contract for how we work. When I break a rule, cite it back
 
 **Differentiator:** Decision capture via Claude Code hooks. Function-level anchoring, structured, queryable. Codebase-memory does not do this.
 
-### Out of scope for v1
+### Out of scope
 
 - Decision relationship graphs (`CAUSED_BY`, `DEPENDS_ON`, `CONFLICTS_WITH`).
 - Vector search and semantic similarity.
@@ -59,7 +59,7 @@ This document is the contract for how we work. When I break a rule, cite it back
 - Dashboard.
 - Type inference and data flow analysis.
 
-## Anti-patterns from v1
+## Anti-patterns we're avoiding
 
 - A 5000-line `server.ts` routing every endpoint.
 - Multiple parallel pipelines that almost do the same thing.

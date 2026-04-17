@@ -1,4 +1,4 @@
-# Plan: Decision Capture v2 — Alert Framing + Keyword Vocab
+# Plan: Decision Capture rework — Alert Framing + Keyword Vocab
 
 ## Context
 
@@ -26,8 +26,8 @@ User-confirmed constraints:
 
 ```sql
 DROP TABLE IF EXISTS decision_nodes;     -- legacy, already present
-DROP TABLE IF EXISTS decision_anchors;   -- v2 break
-DROP TABLE IF EXISTS decisions;          -- v2 break
+DROP TABLE IF EXISTS decision_anchors;   -- schema break
+DROP TABLE IF EXISTS decisions;          -- schema break
 
 CREATE TABLE IF NOT EXISTS decisions (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,7 +47,7 @@ CREATE INDEX IF NOT EXISTS idx_decision_keywords ON decision_keywords(keyword);
 
 `decision_anchors` recreated unchanged. No SQL CHECK on keyword format — TS regex is the boundary validator (per CLAUDE.md "Validate only at system boundaries. Trust internal code").
 
-**Implication acknowledged**: the DROPs run on every `openDatabase` call, which means decisions are wiped at every server start. Acceptable while v2 is in flux; revisit before any milestone where decisions need to persist across restarts.
+**Implication acknowledged**: the DROPs run on every `openDatabase` call, which means decisions are wiped at every server start. Acceptable while this rework is in flux; revisit before any milestone where decisions need to persist across restarts.
 
 ## API (`src/decisions.ts`)
 

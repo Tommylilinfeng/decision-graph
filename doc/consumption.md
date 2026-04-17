@@ -59,7 +59,7 @@ The hook commands run synchronously and read JSON from stdin (Claude Code provid
 
 NEW:
 file-level:
-  [v1-migration] don't add another retry path here
+  [legacy-migration] don't add another retry path here
 fn bar():
   [retry] retry=1 intentional, was 3 (see incident 2025-03)
   [billing-flow] field order parsed externally
@@ -151,7 +151,7 @@ Only the dedupe set; no timestamps, no per-file breakdown. A given decision id a
 - **No cross-file thematic surfacing** via keyword overlap. Token explosion risk; broad keywords pull dozens of unrelated decisions.
 - **No file-level lock on state writes.** Parallel Reads race; loss is "marked shown" entries → redundant re-injection. Token waste, not correctness.
 - **No `install-hooks` CLI subcommand.** Doc shows the snippet; users copy.
-- **No dedicated `reason` parameter on `reset_decision_cache`.** Telemetry is the only use case; v1 doesn't need it.
+- **No dedicated `reason` parameter on `reset_decision_cache`.** Telemetry is the only use case; doesn't need it.
 
 ## Troubleshooting
 

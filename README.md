@@ -22,7 +22,7 @@ context-chain index .
 context-chain stats
 ```
 
-Creates `.ctx/graph.db` at the project root. Re-running `index` rebuilds fully (no incremental in v1).
+Creates `.ctx/graph.db` at the project root. Re-running `index` rebuilds fully (no incremental).
 
 ### Claude Code integration
 
@@ -42,7 +42,7 @@ storage → extract → resolve → pipeline → decisions → mcp → consumpti
 
 Working principles: `CLAUDE.md`.
 
-## v1 scope
+## scope
 
 - TypeScript / JavaScript only
 - Full rebuild per `index` run

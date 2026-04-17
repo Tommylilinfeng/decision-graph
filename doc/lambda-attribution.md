@@ -28,7 +28,7 @@ Under option b:
 
 The graph claims `indexRepo` calls nothing. Ask "who calls `writeGraph`?" — answer is the empty set. This is the project's own orchestrator.
 
-Eleven files were dogfooded. 403 total calls, 112 resolved (28%). A large part of that loss is member chains and external imports (both intentional per the v1 scope). The rest is this: real project-internal calls hidden inside lambdas.
+Eleven files were dogfooded. 403 total calls, 112 resolved (28%). A large part of that loss is member chains and external imports (both intentional per the scope). The rest is this: real project-internal calls hidden inside lambdas.
 
 ## Three options
 
@@ -64,7 +64,7 @@ Rationale:
 - The tool's purpose is decision anchoring and reachability questions for Claude Code, not strict control-flow analysis. "What functions are related to this code path?" is the query; "does this function invoke that one synchronously?" is not.
 - The cases option c gets right (synchronous callbacks: `db.transaction`, `.map`, `.forEach`, `Array.from`, `Promise.then`, React hooks, test harnesses) vastly outnumber the cases it gets wrong (handler assignment). Every TypeScript codebase is full of the first; the second is rare enough that misattributing it is not a debugging crisis.
 - Option b's zero-misattribution guarantee sounded principled in the plan. The live graph proves the guarantee costs more than the error it prevents. Missing `indexRepo -> writeGraph` is a worse bug than overstating `setup -> deleteUser`.
-- Option a is a v1.x project, not a v1 patch. Anonymous nodes, containment edges, and decision-anchor ambiguity each deserve their own design pass.
+- Option a is a larger project, not an incremental patch. Anonymous nodes, containment edges, and decision-anchor ambiguity each deserve their own design pass.
 
 ## Accuracy caveat accepted
 
@@ -90,7 +90,7 @@ function outer() {
 }
 ```
 
-In v1, `inner` is not extracted as a top-level function (v1 tracks only top-level), so its internal calls simply disappear. Option c does not change that — we still stop at `function_declaration`, `generator_function_declaration`, and `method_definition`. We only stop walking into `arrow_function`, `function_expression`, `function` (anonymous), and `generator_function`.
+`inner` is not extracted as a top-level function (tracks only top-level), so its internal calls simply disappear. Option c does not change that — we still stop at `function_declaration`, `generator_function_declaration`, and `method_definition`. We only stop walking into `arrow_function`, `function_expression`, `function` (anonymous), and `generator_function`.
 
 The distinction is semantic: a named nested function is a programmer-declared scope with its own identity. An anonymous lambda passed to another function is a piece of inline behavior with no standalone identity — attributing its calls to the enclosing named function is the closest thing we have to truth.
 

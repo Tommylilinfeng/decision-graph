@@ -1,8 +1,8 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import assert from 'node:assert/strict'
-import { openDatabase, closeDatabase, upsertNodes } from './src/storage'
-import { createDecision, decisionsForFunction, anchorsForDecision, vocabKeywords, liveAnchorCount } from './src/decisions'
+import { openDatabase, closeDatabase, upsertNodes } from '../src/storage'
+import { createDecision, decisionsForFunction, anchorsForDecision, vocabKeywords, liveAnchorCount } from '../src/decisions'
 
 const DB_PATH = '/tmp/ctx-verify-decisions.db'
 

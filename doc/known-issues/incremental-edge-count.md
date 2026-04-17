@@ -2,7 +2,7 @@
 
 ## Status
 
-**Not yet triggered.** v1 is full-rebuild; the bug this document describes cannot fire until incremental re-indexing ships.
+**Not yet triggered.** full-rebuild; the bug this document describes cannot fire until incremental re-indexing ships.
 
 ## Summary
 
@@ -41,7 +41,7 @@ Actual state under naive incremental (re-parse + `insertEdges` for the new calls
 
 The count diverges further on every subsequent edit. There is no SQL statement in the current pipeline that would bring it back down, because nothing deletes the old edges from `main`.
 
-## Why full-rebuild v1 is immune
+## Why full-rebuild is immune
 
 `indexRepo` runs `db.exec('DELETE FROM nodes')` at the top of the write transaction. `ON DELETE CASCADE` on `edges.source_id` and `edges.target_id` wipes every row. The subsequent `insertEdges` batch starts from an empty table, so `count` always starts at `DEFAULT 1` on the first insert per triplet and accumulates correctly within that single batch.
 

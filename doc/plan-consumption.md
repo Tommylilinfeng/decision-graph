@@ -2,7 +2,7 @@
 
 ## Context
 
-After Decision Capture v2 shipped (`doc/plan-alert-keywords.md`), decisions sat in `.ctx/graph.db` but no agent ever saw them. The read side was empty. The project's stated differentiator is "decision capture via Claude Code hooks" — without an automatic injection path, the entire stack was write-only.
+After Decision Capture rework shipped (`doc/plan-alert-keywords.md`), decisions sat in `.ctx/graph.db` but no agent ever saw them. The read side was empty. The project's stated differentiator is "decision capture via Claude Code hooks" — without an automatic injection path, the entire stack was write-only.
 
 This rework added the consumption layer: a `Read` hook that injects relevant decisions for the file being read, plus two MCP read tools (`reset_decision_cache`, `decisions_by_keyword`).
 
@@ -15,7 +15,7 @@ Two paths could surface decisions on read:
 
 Push wins for the primary path. Pull stays as a secondary surface (`decisions_by_keyword`) for topic-focused queries the agent explicitly wants.
 
-## Read-only matcher for v1
+## Read-only matcher
 
 Only `PreToolUse` matcher `Read` is hooked. Edit/Write deferred — agents almost always Read before editing, so Read covers the realistic case. Adding Edit/Write hooks would mostly produce duplicate injections in the common Read-then-Edit pattern.
 
@@ -84,7 +84,7 @@ Claude Code documents `additionalContext` capped at ~10K chars. We leave 2K head
 
 ## STEP 0 — schema fix
 
-Critical prerequisite: `src/storage.ts` had three `DROP TABLE IF EXISTS` lines for `decisions`, `decision_anchors`, and `decision_nodes` left over from the v2 schema break. Every `openDatabase()` re-ran them. Inject spawns a fresh node process per Read → openDatabase → DROPs → all decisions wiped before query. The hook would have found nothing.
+Critical prerequisite: `src/storage.ts` had three `DROP TABLE IF EXISTS` lines for `decisions`, `decision_anchors`, and `decision_nodes` left over from the schema break. Every `openDatabase()` re-ran them. Inject spawns a fresh node process per Read → openDatabase → DROPs → all decisions wiped before query. The hook would have found nothing.
 
 Removing the three lines was Step 0 of this rework. Existing tests still pass after removal (they use `/tmp/` paths that get cleaned up explicitly).
 
@@ -121,13 +121,13 @@ doc/consumption.md      NEW   user-facing setup + flow walkthrough
 - Cross-file thematic surfacing via keyword overlap (token explosion).
 - File-level lock on state writes (concurrent Reads race; loss is "marked shown" → redundant re-injection, not corruption).
 - `install-hooks` CLI helper (doc shows the snippet to copy).
-- `reason` parameter on `reset_decision_cache` (telemetry only; v1 doesn't need it).
+- `reason` parameter on `reset_decision_cache` (telemetry only; doesn't need it).
 - Read tools beyond two (`record_decisions`, `reset_decision_cache`, `decisions_by_keyword` — the per-tool MCP description tax keeps the surface small).
 - Decision relationship graphs (out per CLAUDE.md).
 
 ## Known unfixed gaps
 
-- **Concurrent inject race** — parallel Reads on the same session lose "marked shown" entries. v1 acceptable; fix path: write to `<id>.json.tmp` + atomic rename.
+- **Concurrent inject race** — parallel Reads on the same session lose "marked shown" entries. acceptable; fix path: write to `<id>.json.tmp` + atomic rename.
 - **Silent tool-output drop before auto-compact** — Claude Code drops older tool outputs without firing any hook. Agent loses content, our state file still says "shown." Recovery requires the agent to call `reset_decision_cache` proactively; if the agent doesn't notice, the gap is unfixable from our side.
 - **`/rewind summarize`** has no hook either; same recovery story.
 - **Agent self-detection of compaction is unreliable.** Both gaps above depend on it. Belt + suspenders helps but doesn't eliminate.

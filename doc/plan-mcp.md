@@ -1,6 +1,6 @@
 # Plan: MCP Server (C2 Capture Layer)
 
-> **Tool surface superseded.** Schema, validation, and tool list rewritten in `doc/plan-alert-keywords.md` (`record_decisions` v2 with `decision`/`keywords`). Read tools added in `doc/plan-consumption.md` (`reset_decision_cache`, `decisions_by_keyword`). Server lifecycle, error layering, and batching/atomicity rationale here are still current.
+> **Tool surface superseded.** Schema, validation, and tool list rewritten in `doc/plan-alert-keywords.md` (`record_decisions` rework with `decision`/`keywords`). Read tools added in `doc/plan-consumption.md` (`reset_decision_cache`, `decisions_by_keyword`). Server lifecycle, error layering, and batching/atomicity rationale here are still current.
 
 ## Context
 
@@ -216,7 +216,7 @@ To:
 
 ~100 lines, sections:
 
-1. **Overview** — single tool `record_decision`; write-only in v1; reads via SQLite until C3
+1. **Overview** — single tool `record_decision`; write-only; reads via SQLite until C3
 2. **Prerequisite** — must run `context-chain index <root>` before first MCP use
 3. **Claude Code setup** — `~/.claude/settings.json` example with `mcp.servers.context-chain.command`, `args`, optional `env`
 4. **Permission modes** —
@@ -224,7 +224,7 @@ To:
    - `permissions.ask: [...]` — every write prompts the user
    Explicit: the choice is the user's Claude Code setting, not a flag in this tool.
 5. **Error behavior** — validation failures come back in tool response; unexpected errors kill the tool
-6. **Session ID** — env var `CONTEXT_CHAIN_SESSION_ID` if Claude Code injects one; otherwise null. The field is recorded but has no reader in v1.
+6. **Session ID** — env var `CONTEXT_CHAIN_SESSION_ID` if Claude Code injects one; otherwise null. The field is recorded but has no reader.
 
 ## Out of scope
 
@@ -233,7 +233,7 @@ To:
 - Process pool / multi-project concurrency — one server per project
 - Auto-detect project root by walking up to `.ctx/` — explicit CLI arg
 - Dry-run / preview — handled by Claude Code's `permissions.ask` mode
-- `session_id` consumption logic — it's a stored field with no query in v1
+- `session_id` consumption logic — it's a stored field with no query
 
 ## Size budgets
 

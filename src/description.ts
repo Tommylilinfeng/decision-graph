@@ -19,7 +19,7 @@ export function buildDescription(db: Db): string {
     '- cross-file coupling: "output format must match src/api.ts schema"',
     '- intentional absence: "no validation here; middleware does it upstream"',
     '- non-obvious distinction: "foo() and bar() look duplicate but own different state"',
-    '- temporal state: "v1 fallback exists, remove after Q3 migration"',
+    '- temporal state: "legacy fallback exists, remove after Q3 migration"',
     '',
     'DO NOT record:',
     '- things grep finds (PRAGMA, type signatures, literal values)',
@@ -30,9 +30,9 @@ export function buildDescription(db: Db): string {
     '',
     'KEYWORDS: >=1 per decision. Group decisions semantically; need NOT appear in the decision text — use them for business concepts ("billing-flow") or cross-cutting topics ("retry"). Reuse existing keywords; introduce new only for genuinely new concepts.',
     '',
-    'KEYWORD FORMAT: lowercase ASCII, start with letter, end with letter/digit, [a-z0-9-] in between, length 2-40. OK: "retry", "v1-fallback", "billing-flow". Rejected: "Retry", "retry!", "a", "abc-".',
+    'KEYWORD FORMAT: lowercase ASCII, start with letter, end with letter/digit, [a-z0-9-] in between, length 2-40. OK: "retry", "legacy-fallback", "billing-flow". Rejected: "Retry", "retry!", "a", "abc-".',
     '',
-    'ANCHORS: function-level for single-function situations; file-level for whole-file. v1 has no class/method/block — anchor those to the enclosing function. Paths repo-relative; POSIX or OS sep both accepted.',
+    'ANCHORS: function-level for single-function situations; file-level for whole-file. No class/method/block anchoring — anchor those to the enclosing function. Paths repo-relative; POSIX or OS sep both accepted.',
   ]
 
   if (shown.length > 0) {

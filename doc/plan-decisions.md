@@ -95,7 +95,7 @@ export function anchorsForDecision(db, decision_id): Anchor[]
 
 ## What this plan **does not** do
 
-- **No standalone "only-file-anchors" query.** A separate `fileLevelDecisionsFor(file)` has no v1 consumer. `decisionsForFunction(file, someName)` already returns file-level anchors for the file along with function-level ones.
+- **No standalone "only-file-anchors" query.** A separate `fileLevelDecisionsFor(file)` has no consumer. `decisionsForFunction(file, someName)` already returns file-level anchors for the file along with function-level ones.
 - **No `decisionsForFile(file)` aggregation.** "Every function-level decision for any function in this file" is a C3 graph-aware query.
 - **No directory or project anchor kinds.** Multi-file "directory-ish" patterns are expressed by listing files. Project-level rules live in `CLAUDE.md` / `README.md`.
 - **No decision relationships** (`caused_by`, `supersedes`, `conflicts_with`).
@@ -157,4 +157,4 @@ Budget: `src/decisions.ts` ≤ 120, `src/storage.ts` ≤ 155, `verify-decisions.
 - `verify-decisions.ts` overshot by 31 lines because each scenario was kept self-contained (own upserts, own decisions, own assertions) rather than sharing setup. The tradeoff of "readable as a scenario list" over "compact in lines" was kept — verify is executable documentation.
 - `DROP TABLE IF EXISTS decision_nodes` in SCHEMA cleaned up the earlier prototype that shipped `decision_nodes` (natural-key, no kind column) in the same session. No migration needed — the prototype was never outside the dogfood run.
 - The empty-string sentinel (`anchor_name = ''` for file-kind) was originally a concern as "SQLite detail leaking out". The discriminated-union API return type keeps it contained — callers pattern-match on `kind`, never inspect `name` on file-kind anchors.
-- `EXISTS`-based live computation runs O(decision_anchor_count) subqueries for `anchorsForDecision`. Not a concern at the scales of v1, but flagged here for future.
+- `EXISTS`-based live computation runs O(decision_anchor_count) subqueries for `anchorsForDecision`. Not a concern at current scales, but flagged here for future.

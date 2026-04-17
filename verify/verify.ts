@@ -5,7 +5,7 @@ import {
   upsertNodes, insertEdges,
   findNodeById, findNodesByName, findNodesByFile, findNodeAtLine,
   edgesFromNode, edgesToNode,
-} from './src/storage'
+} from '../src/storage'
 
 const DB_PATH = '/tmp/ctx-verify.db'
 

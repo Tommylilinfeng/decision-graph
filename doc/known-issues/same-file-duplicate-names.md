@@ -55,7 +55,7 @@ Fail the whole `index` run if any file has a duplicate. **Rejected**: makes the 
 ### Store all duplicates under mangled names (`foo`, `foo$1`, `foo$2`)
 
 Preserves every body. **Rejected**:
-- `resolveCall('foo', ...)` becomes ambiguous: which `foo` does a caller mean? There is no structural evidence to pick one, and v1's resolver explicitly refuses to guess without evidence.
+- `resolveCall('foo', ...)` becomes ambiguous: which `foo` does a caller mean? There is no structural evidence to pick one, and the resolver explicitly refuses to guess without evidence.
 - Decision anchors would have to disambiguate between `foo` and `foo$1` — but the source code has one `foo`, not two named entities. The mangling is our invention, not the programmer's.
 - Line-range lookup (`findNodeAtLine`) would have to pick one anyway, regressing to the same first-wins choice for that query.
 

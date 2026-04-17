@@ -1,8 +1,8 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import assert from 'node:assert/strict'
-import { indexRepo } from './src/pipeline'
-import { openDatabase, closeDatabase, findNodesByFile } from './src/storage'
+import { indexRepo } from '../src/pipeline'
+import { openDatabase, closeDatabase, findNodesByFile } from '../src/storage'
 
 function makeFixture(dir: string, files: Record<string, string>): void {
   fs.rmSync(dir, { recursive: true, force: true })
