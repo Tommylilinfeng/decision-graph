@@ -1,0 +1,25 @@
+{
+  "name": "context-chain",
+  "version": "2.0.0",
+  "description": "Lightweight code knowledge graph",
+  "license": "Apache-2.0",
+  "bin": {
+    "context-chain": "dist/src/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "verify": "tsc && node dist/verify.js && node dist/verify-extract.js && node dist/verify-resolve.js && node dist/verify-pipeline.js && node dist/verify-decisions.js && node dist/verify-mcp.js && node dist/verify-inject.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "better-sqlite3": "^11.0.0",
+    "glob": "^13.0.6",
+    "tree-sitter-wasms": "^0.1.13",
+    "web-tree-sitter": "^0.24.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  }
+}

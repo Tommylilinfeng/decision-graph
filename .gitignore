@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.ctx/
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+.claude/settings.local.json
+.mcp.json
