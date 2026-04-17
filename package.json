@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "prepare": "tsc",
     "verify": "tsc && node dist/verify.js && node dist/verify-extract.js && node dist/verify-resolve.js && node dist/verify-pipeline.js && node dist/verify-decisions.js && node dist/verify-mcp.js && node dist/verify-inject.js"
   },
   "dependencies": {

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "context-chain": {
+      "command": "node",
+      "args": [
+        "/ABSOLUTE/PATH/TO/context-chain/dist/src/mcp.js",
+        "/ABSOLUTE/PATH/TO/project/you/indexed"
+      ]
+    }
+  }
+}
